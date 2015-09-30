@@ -5,7 +5,6 @@ A simple HTTP server.
 **Assuming a OS X operating system and cwd=`src/`**
 
 ### Example Project Usage
-Run server in one terminal
 ```sh
 $ make
 $ ./httpd
