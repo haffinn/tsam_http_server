@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <glib.h>
 
 #include "lib/session.c"
 #include "lib/socket.c"
@@ -10,7 +11,7 @@
  */
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "Please prove port number\n");
+        fprintf(stderr, "Please provide port number\n");
         return 1;
     }
 
