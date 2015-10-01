@@ -9,13 +9,16 @@
 /**
  * Kick start!
  */
-int main(int argc, char **argv) {
-    if (argc < 2) {
+int main(int argc, char **argv) 
+{
+    if (argc < 2) 
+    {
         fprintf(stderr, "Please provide port number\n");
         return 1;
     }
 
-    session_t session = {
+    session_t session = 
+    {
         .port = atoi(argv[1]),
         .directory = "htdocs",
         .block_number = 0,

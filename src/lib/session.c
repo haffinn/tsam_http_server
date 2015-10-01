@@ -1,12 +1,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-typedef union Number {
+typedef union Number 
+{
     unsigned short value;
     char bytes[2];
 } number_t;
 
-typedef struct session {
+typedef struct session 
+{
     char* filename;
     char* directory;
     char* path;
