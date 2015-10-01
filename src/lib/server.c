@@ -6,6 +6,8 @@
 
 void server(session_t* session) 
 {
+	char buffer[65535];
+
     printf("Port %d\n", session->port);
 
     for (;;)
@@ -19,7 +21,8 @@ void server(session_t* session)
     		exit(1);
     	}
 
-    	printf("connected to %d\n", connectFd);
+    	recv(session->socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &session->client, &session->client_size);
+    	printf("Buffer: \n%s\n", buffer);
 
     	if (shutdown(connectFd, SHUT_RDWR) == -1)
     	{
