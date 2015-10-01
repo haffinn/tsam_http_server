@@ -21,8 +21,8 @@ void server(session_t* session)
     		exit(1);
     	}
 
-    	recv(session->socket_fd, buffer, sizeof(buffer), 0, (struct sockaddr*) &session->client, &session->client_size);
-    	printf("Buffer: \n%s\n", buffer);
+        read(connectFd, buffer, 5999);
+        printf("[Request]:\n%s\n", buffer);
 
     	if (shutdown(connectFd, SHUT_RDWR) == -1)
     	{
