@@ -6,6 +6,7 @@
 
 void server(session_t* session) 
 {
+    char buffer[6000];
     printf("Port %d\n", session->port);
 
     for (;;)
@@ -19,7 +20,8 @@ void server(session_t* session)
     		exit(1);
     	}
 
-    	printf("connected to %d\n", connectFd);
+        read(connectFd, buffer, 5999);
+        printf("[Request]:\n%s\n", buffer);
 
     	if (shutdown(connectFd, SHUT_RDWR) == -1)
     	{
