@@ -65,6 +65,7 @@ void server(session_t* session)
     	timestr = g_time_val_to_iso8601(&tv);
 
         printf("%s : %s:%d %s\n", timestr, getIpAdress(session), getPort(session), verb);
+        printf("%s : %s\n", resource, "200"); // TODO: reponse code
         fflush(stdout);
         g_free(timestr);
 
