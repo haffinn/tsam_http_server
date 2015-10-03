@@ -4,15 +4,6 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 
-#define VERB_DEFAULT 0
-#define VERB_GET 1
-#define VERB_HEAD 2
-#define VERB_POST 3
-
-#define BUFFER_SIZE 65535
-#define VERB_SIZE 25
-#define RESOURCE_SIZE 255
-
 unsigned short getPort(session_t* session) {
     struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
     return socket_address->sin_port;
@@ -38,7 +29,7 @@ void handleGetRequest(int connectFd, char *resource)
     send(connectFd, "<html/>\n", 9, 0);
 }
 
-void log(session_t *session, char* resource, char* verb, int responseCode) {
+void logToFile(session_t *session, char* resource, char* verb, int responseCode) {
     FILE* file = fopen("log", "a");
 
     if (file == NULL) {
@@ -69,7 +60,6 @@ void server(session_t* session)
     int connectFd;
 
     char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
-    char *headerFail = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n<h1>Not found</h1>";
 
     for (;;)
     {
@@ -90,22 +80,11 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-        if (g_strcmp0(verb, "GET") == 0)
-    	{
-    	    session->verb = VERB_GET;
-    	}
-    	else if (g_strcmp0(verb, "HEAD") == 0)
-        {
-	        session->verb = VERB_HEAD;
-        }
-        else if (g_strcmp0(verb, "POST") == 0)
-        {
-            session->verb = VERB_POST;
-        }
+        setSessionVerb(session, verb);
 
         if (session->verb == VERB_HEAD || session->verb == VERB_GET)
         {
-            log(session, resource, verb, 200);
+            logToFile(session, resource, verb, 200);
        	    send(connectFd, headerOk, strlen(headerOk), 0);
 
        	    if (session->verb == VERB_GET)
@@ -115,14 +94,14 @@ void server(session_t* session)
         }
         else if (session->verb == VERB_POST)
         {
-            log(session, resource, verb, 200);
+            logToFile(session, resource, verb, 200);
    	        buildDom(chunks[1], buffer);
        	    send(connectFd, headerOk, strlen(headerOk), 0);
        	    send(connectFd, buffer, strlen(buffer), 0);
         }
         else
         {
-             log(session, resource, verb, 500);
+             logToFile(session, resource, verb, 500);
         }
 
     	if (shutdown(connectFd, SHUT_RDWR) == -1)

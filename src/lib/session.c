@@ -1,13 +1,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-typedef union Number 
+typedef union Number
 {
     unsigned short value;
     char bytes[2];
 } number_t;
 
-typedef struct session 
+typedef struct session
 {
     char* filename;
     char* directory;
@@ -25,3 +25,18 @@ typedef struct session
     struct sockaddr_storage client;
     socklen_t client_size;
 } session_t;
+
+void setSessionVerb(session_t* session, char* verb) {
+    if (g_strcmp0(verb, "GET") == 0)
+	{
+	    session->verb = VERB_GET;
+	}
+	else if (g_strcmp0(verb, "HEAD") == 0)
+    {
+        session->verb = VERB_HEAD;
+    }
+    else if (g_strcmp0(verb, "POST") == 0)
+    {
+        session->verb = VERB_POST;
+    }
+}
