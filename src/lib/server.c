@@ -8,10 +8,16 @@
 #define VERB_SIZE 25
 #define RESOURCE_SIZE 255
 
+void buildDom(char* data, char* buffer)
+{
+	memset(buffer, 0, BUFFER_SIZE);
+	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
+}
+
 void server(session_t* session) 
 {
     char buffer[BUFFER_SIZE];
-    gchar **lines, **tokens;
+    gchar **lines, **tokens, **chunks;
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
     int connectFd;
     FILE* file;
@@ -32,7 +38,8 @@ void server(session_t* session)
 
         read(connectFd, buffer, BUFFER_SIZE - 1);
 
-        lines = g_strsplit(buffer, "\n", 3);
+        chunks = g_strsplit(buffer, "\r\n\r\n", 2);
+        lines = g_strsplit(chunks[0], "\r\n", 3);
         tokens = g_strsplit(lines[0], " ", 3);
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
@@ -46,12 +53,14 @@ void server(session_t* session)
        	    if (g_strcmp0(verb, "GET") == 0)
        	    {
        	    	fread(buffer, BUFFER_SIZE - 1, 1, file);
-       	    	send(connectFd, buffer, strlen(buffer), 0);	
+       	    	send(connectFd, buffer, strlen(buffer), 0);
        	    }
         }
         else if (g_strcmp0(verb, "POST") == 0)
-        {
-        	printf("Post request!\n");
+        {	
+       	    send(connectFd, headerOk, strlen(headerOk), 0);
+        	buildDom(chunks[1], buffer);
+       	    send(connectFd, buffer, strlen(buffer), 0);
         }
         else
         {
