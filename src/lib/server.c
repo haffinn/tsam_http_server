@@ -8,6 +8,21 @@
 #define VERB_SIZE 25
 #define RESOURCE_SIZE 255
 
+
+unsigned short getPort(session_t* session) {
+    struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
+    return socket_address->sin_port;
+}
+
+char* getIpAdress(session_t* session) {
+    struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
+    int ip_address = socket_address->sin_addr.s_addr;
+    char ip_string[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ip_address, ip_string, INET_ADDRSTRLEN);
+    char* p = ip_string;
+    return p;
+}
+
 void buildDom(char* data, char* buffer)
 {
 	memset(buffer, 0, BUFFER_SIZE);
@@ -43,6 +58,15 @@ void server(session_t* session)
         tokens = g_strsplit(lines[0], " ", 3);
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
+
+		GTimeVal tv;
+		gchar *timestr;
+    	g_get_current_time(&tv);
+    	timestr = g_time_val_to_iso8601(&tv);
+
+        printf("%s : %s:%d %s\n", timestr, getIpAdress(session), getPort(session), verb);
+        fflush(stdout);
+        g_free(timestr);
 
         file = fopen("htdocs/index.html", "r");
 
