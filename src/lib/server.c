@@ -22,7 +22,7 @@ void server(session_t* session)
     for (;;)
     {
     	g_new0(char, BUFFER_SIZE);
-    	
+
     	if ((connectFd = accept(session->socket_fd, NULL, NULL)) < 0)
     	{
     		perror("Accept failed\n");
@@ -39,17 +39,24 @@ void server(session_t* session)
 
         file = fopen("htdocs/index.html", "r");
 
-        if (file != NULL && (!g_strcmp0(resource, "/") || !g_strcmp0(resource, "/index.html")))
+        if ((g_strcmp0(verb, "GET") == 0) || (g_strcmp0(verb, "HEAD") == 0))
         {
-            fread(buffer, BUFFER_SIZE - 1, 1, file);
-            send(connectFd, headerOk, strlen(headerOk), 0);
-            send(connectFd, buffer, strlen(buffer), 0);
-        } 
+       	    send(connectFd, headerOk, strlen(headerOk), 0);
+
+       	    if (g_strcmp0(verb, "GET") == 0)
+       	    {
+       	    	fread(buffer, BUFFER_SIZE - 1, 1, file);
+       	    	send(connectFd, buffer, strlen(buffer), 0);	
+       	    }
+        }
+        else if (g_strcmp0(verb, "POST") == 0)
+        {
+        	printf("Post request!\n");
+        }
         else
         {
-            send(connectFd, headerFail, strlen(headerFail), 0);
+        	printf("BAD!\n");
         }
-        
 
     	if (shutdown(connectFd, SHUT_RDWR) == -1)
     	{
