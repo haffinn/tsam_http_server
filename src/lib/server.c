@@ -34,12 +34,12 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
-void handleGetRequest(int connectFd, char *resource) 
+void handleGetRequest(int connectFd, char *resource)
 {
     send(connectFd, "<html/>\n", 9, 0);
 }
 
-void server(session_t* session) 
+void server(session_t* session)
 {
     char buffer[BUFFER_SIZE];
     gchar **lines, **tokens, **chunks;
@@ -71,22 +71,22 @@ void server(session_t* session)
 
 
         if (g_strcmp0(verb, "GET") == 0)
-	{
-	    session->verb = VERB_GET;
-	}
-	else if (g_strcmp0(verb, "HEAD") == 0)
+    	{
+    	    session->verb = VERB_GET;
+    	}
+    	else if (g_strcmp0(verb, "HEAD") == 0)
         {
 	    session->verb = VERB_HEAD;
         }
         else if (g_strcmp0(verb, "POST") == 0)
-        {	
+        {
 	    session->verb = VERB_POST;
         }
 
-	GTimeVal tv;
-	gchar *timestr;
-	g_get_current_time(&tv);
-	timestr = g_time_val_to_iso8601(&tv);
+    	GTimeVal tv;
+    	gchar *timestr;
+    	g_get_current_time(&tv);
+    	timestr = g_time_val_to_iso8601(&tv);
 
         printf("%s : %s:%d %s\n", timestr, getIpAdress(session), getPort(session), verb);
         printf("%s : %s\n", resource, "200"); // TODO: reponse code
@@ -100,12 +100,12 @@ void server(session_t* session)
 
        	    if (session->verb == VERB_GET)
        	    {
-		handleGetRequest(connectFd, resource);
+                handleGetRequest(connectFd, resource);
        	    }
         }
         else if (session->verb == VERB_POST)
-        {	
-   	    buildDom(chunks[1], buffer);
+        {
+   	        buildDom(chunks[1], buffer);
        	    send(connectFd, headerOk, strlen(headerOk), 0);
        	    send(connectFd, buffer, strlen(buffer), 0);
         }
