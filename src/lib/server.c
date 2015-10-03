@@ -69,18 +69,17 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-
         if (g_strcmp0(verb, "GET") == 0)
     	{
     	    session->verb = VERB_GET;
     	}
     	else if (g_strcmp0(verb, "HEAD") == 0)
         {
-	    session->verb = VERB_HEAD;
+	        session->verb = VERB_HEAD;
         }
         else if (g_strcmp0(verb, "POST") == 0)
         {
-	    session->verb = VERB_POST;
+            session->verb = VERB_POST;
         }
 
     	GTimeVal tv;
