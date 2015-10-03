@@ -21,12 +21,28 @@ typedef struct session
     int verb;
     int socket_fd;
 
+    GHashTable* headers;
+
     struct sockaddr_in server;
     struct sockaddr_storage client;
     socklen_t client_size;
 } session_t;
 
-void setSessionVerb(session_t* session, char* verb) {
+void setSessionHeaders(session_t *session, gchar **lines)
+{
+    int headersCount = g_strv_length(lines) - 1;
+    session->headers = g_hash_table_new(g_str_hash, g_str_equal);
+
+    while (headersCount-- > 1)
+    {
+        gchar **header  = g_strsplit(lines[headersCount], ": ", 2);
+        g_hash_table_insert(session->headers, header[0], header[1]);
+        printf("%s: %s\n", header[0], header[1]);
+    }
+}
+
+void setSessionVerb(session_t* session, char* verb)
+{
     if (g_strcmp0(verb, "GET") == 0)
 	{
 	    session->verb = VERB_GET;

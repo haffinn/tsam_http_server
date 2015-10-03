@@ -75,11 +75,12 @@ void server(session_t* session)
         read(connectFd, buffer, BUFFER_SIZE - 1);
 
         chunks = g_strsplit(buffer, "\r\n\r\n", 2);
-        lines = g_strsplit(chunks[0], "\r\n", 3);
+        lines = g_strsplit(chunks[0], "\r\n", 20);
         tokens = g_strsplit(lines[0], " ", 3);
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
+        setSessionHeaders(session, lines);
         setSessionVerb(session, verb);
 
         if (session->verb == VERB_HEAD || session->verb == VERB_GET)
@@ -113,6 +114,7 @@ void server(session_t* session)
     	}
 
     	close(connectFd);
+        g_hash_table_destroy(session->headers);
     }
 
     close(session->socket_fd);
