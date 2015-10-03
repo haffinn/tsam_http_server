@@ -4,6 +4,11 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 
+#define VERB_DEFAULT 0
+#define VERB_GET 1
+#define VERB_HEAD 2
+#define VERB_POST 3
+
 #define BUFFER_SIZE 65535
 #define VERB_SIZE 25
 #define RESOURCE_SIZE 255
@@ -59,32 +64,45 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-		GTimeVal tv;
-		gchar *timestr;
-    	g_get_current_time(&tv);
-    	timestr = g_time_val_to_iso8601(&tv);
+
+        if (g_strcmp0(verb, "GET") == 0)
+	{
+	    session->verb = VERB_GET;
+	}
+	else if (g_strcmp0(verb, "HEAD") == 0)
+        {
+	    session->verb = VERB_HEAD;
+        }
+        else if (g_strcmp0(verb, "POST") == 0)
+        {	
+	    session->verb = VERB_POST;
+        }
+
+	GTimeVal tv;
+	gchar *timestr;
+	g_get_current_time(&tv);
+	timestr = g_time_val_to_iso8601(&tv);
 
         printf("%s : %s:%d %s\n", timestr, getIpAdress(session), getPort(session), verb);
         printf("%s : %s\n", resource, "200"); // TODO: reponse code
-        fflush(stdout);
         g_free(timestr);
 
         file = fopen("htdocs/index.html", "r");
 
-        if ((g_strcmp0(verb, "GET") == 0) || (g_strcmp0(verb, "HEAD") == 0))
+        if (session->verb == VERB_HEAD || session->verb == VERB_GET)
         {
        	    send(connectFd, headerOk, strlen(headerOk), 0);
 
-       	    if (g_strcmp0(verb, "GET") == 0)
+       	    if (session->verb == VERB_GET)
        	    {
        	    	fread(buffer, BUFFER_SIZE - 1, 1, file);
        	    	send(connectFd, buffer, strlen(buffer), 0);
        	    }
         }
-        else if (g_strcmp0(verb, "POST") == 0)
+        else if (session->verb == VERB_POST)
         {	
+   	    buildDom(chunks[1], buffer);
        	    send(connectFd, headerOk, strlen(headerOk), 0);
-        	buildDom(chunks[1], buffer);
        	    send(connectFd, buffer, strlen(buffer), 0);
         }
         else

@@ -18,7 +18,7 @@ typedef struct session
 
     int port;
     int state;
-    int block_number;
+    int verb;
     int socket_fd;
 
     struct sockaddr_in server;

@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     {
         .port = atoi(argv[1]),
         .directory = "htdocs",
-        .block_number = 0,
+        .verb = 0,
         .state = 0 // TODO: Hmmm?
     };
    
