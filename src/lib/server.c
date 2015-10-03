@@ -34,6 +34,11 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
+void handleGetRequest(int connectFd, char *resource) 
+{
+    send(connectFd, "<html/>\n", 9, 0);
+}
+
 void server(session_t* session) 
 {
     char buffer[BUFFER_SIZE];
@@ -95,8 +100,7 @@ void server(session_t* session)
 
        	    if (session->verb == VERB_GET)
        	    {
-       	    	fread(buffer, BUFFER_SIZE - 1, 1, file);
-       	    	send(connectFd, buffer, strlen(buffer), 0);
+		handleGetRequest(connectFd, resource);
        	    }
         }
         else if (session->verb == VERB_POST)
