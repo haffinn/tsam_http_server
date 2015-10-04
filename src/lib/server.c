@@ -4,16 +4,6 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 
-#define VERB_DEFAULT 0
-#define VERB_GET 1
-#define VERB_HEAD 2
-#define VERB_POST 3
-
-#define BUFFER_SIZE 65535
-#define VERB_SIZE 25
-#define RESOURCE_SIZE 255
-
-
 unsigned short getPort(session_t* session) {
     struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
     return socket_address->sin_port;
@@ -129,16 +119,37 @@ void handleGetRequest(int connectFd, char *resource)
     }
 }
 
+void logToFile(session_t *session, char* resource, char* verb, int responseCode) {
+    FILE* file = fopen("log", "a");
+
+    if (file == NULL) {
+        perror("Failed to open logfile.\n");
+        exit(1);
+    }
+
+    GTimeVal tv;
+    g_get_current_time(&tv);
+    gchar *timestr = g_time_val_to_iso8601(&tv);
+
+    // Print to file (append)
+    fprintf(file, "%s : %s:%d %s\n",
+        timestr, getIpAdress(session), getPort(session), verb);
+
+    fprintf(file, "%s : %d\n", resource, responseCode);
+
+    // Free resources
+    g_free(timestr);
+    fclose(file);
+}
+
 void server(session_t* session)
 {
     char buffer[BUFFER_SIZE];
     gchar **lines, **tokens, **chunks;
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
     int connectFd;
-    FILE* file;
 
     char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
-    char *headerFail = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n<h1>Not found</h1>";
 
     for (;;)
     {
@@ -154,37 +165,17 @@ void server(session_t* session)
         read(connectFd, buffer, BUFFER_SIZE - 1);
 
         chunks = g_strsplit(buffer, "\r\n\r\n", 2);
-        lines = g_strsplit(chunks[0], "\r\n", 3);
+        lines = g_strsplit(chunks[0], "\r\n", 20);
         tokens = g_strsplit(lines[0], " ", 3);
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-        if (g_strcmp0(verb, "GET") == 0)
-    	{
-    	    session->verb = VERB_GET;
-    	}
-    	else if (g_strcmp0(verb, "HEAD") == 0)
-        {
-	        session->verb = VERB_HEAD;
-        }
-        else if (g_strcmp0(verb, "POST") == 0)
-        {
-            session->verb = VERB_POST;
-        }
-
-    	GTimeVal tv;
-    	gchar *timestr;
-    	g_get_current_time(&tv);
-    	timestr = g_time_val_to_iso8601(&tv);
-
-        printf("%s : %s:%d %s\n", timestr, getIpAdress(session), getPort(session), verb);
-        printf("%s : %s\n", resource, "200"); // TODO: reponse code
-        g_free(timestr);
-
-        file = fopen("htdocs/index.html", "r");
+        setSessionHeaders(session, lines);
+        setSessionVerb(session, verb);
 
         if (session->verb == VERB_HEAD || session->verb == VERB_GET)
         {
+            logToFile(session, resource, verb, 200);
        	    send(connectFd, headerOk, strlen(headerOk), 0);
 
        	    if (session->verb == VERB_GET)
@@ -194,13 +185,14 @@ void server(session_t* session)
         }
         else if (session->verb == VERB_POST)
         {
+            logToFile(session, resource, verb, 200);
    	        buildDom(chunks[1], buffer);
        	    send(connectFd, headerOk, strlen(headerOk), 0);
        	    send(connectFd, buffer, strlen(buffer), 0);
         }
         else
         {
-        	printf("BAD!\n");
+             logToFile(session, resource, verb, 500);
         }
 
     	if (shutdown(connectFd, SHUT_RDWR) == -1)
@@ -212,6 +204,7 @@ void server(session_t* session)
     	}
 
     	close(connectFd);
+        g_hash_table_destroy(session->headers);
     }
 
     close(session->socket_fd);
