@@ -27,18 +27,14 @@ void buildDom(char* data, char* buffer)
 void handleGetRequest(int connectFd, char *resource)
 {
     // TODO: setja inn slóð, ip addressu og port nr
-    // send(connectFd, "<!doctype html><html><body><p>http://localhost/<br/>127.0.0.1:2182</p><body/><html/>\n", 86, 0);
 
     GHashTable* parameters;
 
-    gchar **seperateByQuestionMark, **seperateByAmpersant, **seperateByEqual;
+    gchar **seperateByQuestionMark, **seperateByAmpersant;
     gchar *color;
 
     // test?arg=foo&arg2=bar   --->   [test], [arg=foo&arg2=bar]
     seperateByQuestionMark = g_strsplit(resource, "?", 2);
-
-    //printf("0: %s 1: %s\n", seperateByQuestionMark[0], seperateByQuestionMark[1]);
-
 
     if (seperateByQuestionMark[1] != NULL)
     {
@@ -46,12 +42,9 @@ void handleGetRequest(int connectFd, char *resource)
 
         // arg=foo&arg2=bar   --->  [arg=foo] [arg2=bar]   
         seperateByAmpersant = g_strsplit(stringAfterSplit, "&", 100);
-        //printf("seperateByAmpersant[0]: %s -> seperateByAmpersant[1]: %s\n", seperateByAmpersant[0], seperateByAmpersant[1]);
 
         if (seperateByAmpersant[1] != NULL)
         {
-            //printf("%s\n", "Það er ? merki í slóðinni");
-
             parameters = g_hash_table_new(g_str_hash, g_str_equal);
 
             int size = g_strv_length(seperateByAmpersant);
@@ -65,33 +58,21 @@ void handleGetRequest(int connectFd, char *resource)
             {
                 header  = g_strsplit(seperateByAmpersant[i], "=", 2);
                 g_hash_table_insert(parameters, header[0], header[1]);
-                printf("%s -> %s\n", header[0], header[1]);
+                //printf("%s -> %s\n", header[0], header[1]);
 
                 gchar* result = g_strconcat("<br/>\n\t", header[0], " = ", header[1], (char *)NULL);
                 send(connectFd, result, strlen(result), 0);
-
-                //int length = g_strv_length(returnString);
-                //printf("length: %s\n", length);
-                //send(connectFd, returnString, 200, 0);
-
             }
             send(connectFd, "\n\t<p/>\n<body/>\n<html/>\n", 26, 0);
-            
-            //printf("%s\n", secondPartOfString);
-
-            //gchar* returnString = g_strconcat(firstPartOfString, thirdPartOfString);
-            //printf("%s\n", returnString);
-            
         }
         else
         {
             gchar **array;
             array = g_strsplit(seperateByAmpersant[0], "=", 2);
-            //printf("array[0]: %s array[1]: %s\n", array[0], array[1]);
+
             if (g_strcmp0(array[0], "bg") == 0)
             {
                 color = array[1];
-                //printf("color: %s\n", array[1]);
                 // html with color
                 gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n", (char *)NULL);
                 send(connectFd, returnString, 88, 0);
@@ -162,6 +143,10 @@ void server(session_t* session)
         tokens = g_strsplit(lines[0], " ", 3);
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
+
+        // printf("verb: %s\n", verb);
+        // printf("resource: %s\n", resource);
+        // printf("---- end of resource -----%s\n");
 
         setSessionHeaders(session, lines);
         setSessionVerb(session, verb);
