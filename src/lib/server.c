@@ -36,7 +36,97 @@ void buildDom(char* data, char* buffer)
 
 void handleGetRequest(int connectFd, char *resource)
 {
-    send(connectFd, "<html/>\n", 9, 0);
+    // TODO: setja inn slóð, ip addressu og port nr
+    // send(connectFd, "<!doctype html><html><body><p>http://localhost/<br/>127.0.0.1:2182</p><body/><html/>\n", 86, 0);
+
+    GHashTable* parameters;
+
+    gchar **seperateByQuestionMark, **seperateByAmpersant, **seperateByEqual;
+    gchar *color;
+
+    // test?arg=foo&arg2=bar   --->   [test], [arg=foo&arg2=bar]
+    seperateByQuestionMark = g_strsplit(resource, "?", 2);
+
+    //printf("0: %s 1: %s\n", seperateByQuestionMark[0], seperateByQuestionMark[1]);
+
+
+    if (seperateByQuestionMark[1] != NULL)
+    {
+        gchar* stringAfterSplit = seperateByQuestionMark[1];
+
+        // arg=foo&arg2=bar   --->  [arg=foo] [arg2=bar]   
+        seperateByAmpersant = g_strsplit(stringAfterSplit, "&", 100);
+        //printf("seperateByAmpersant[0]: %s -> seperateByAmpersant[1]: %s\n", seperateByAmpersant[0], seperateByAmpersant[1]);
+
+        if (seperateByAmpersant[1] != NULL)
+        {
+            //printf("%s\n", "Það er ? merki í slóðinni");
+
+            parameters = g_hash_table_new(g_str_hash, g_str_equal);
+
+            int size = g_strv_length(seperateByAmpersant);
+            int i = size;
+            parameters = g_hash_table_new(g_str_hash, g_str_equal);
+
+            gchar **header;
+
+            send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>", 38, 0);
+            while (i-- > 0)
+            {
+                header  = g_strsplit(seperateByAmpersant[i], "=", 2);
+                g_hash_table_insert(parameters, header[0], header[1]);
+                printf("%s -> %s\n", header[0], header[1]);
+
+                //int length = g_strv_length(returnString);
+                //printf("length: %s\n", length);
+                //send(connectFd, returnString, 200, 0);
+
+                // if (i == size)
+                // {
+
+                // }
+                // else
+                // {
+
+                // }
+                
+
+
+            }
+            send(connectFd, "\n\t<p/>\n<body/>\n<html/>\n", 26, 0);
+            
+            //printf("%s\n", secondPartOfString);
+
+            //gchar* returnString = g_strconcat(firstPartOfString, thirdPartOfString);
+            //printf("%s\n", returnString);
+            
+        }
+        else
+        {
+            gchar **array;
+            array = g_strsplit(seperateByAmpersant[0], "=", 2);
+            //printf("array[0]: %s array[1]: %s\n", array[0], array[1]);
+            if (g_strcmp0(array[0], "bg") == 0)
+            {
+                color = array[1];
+                //printf("color: %s\n", array[1]);
+                // html with color
+                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n");
+                send(connectFd, returnString, 88, 0);
+            }
+            else
+            {
+                // html with parameter
+                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", array[0], " = ", array[1], "<p/>\n<body/>\n<html/>\n");
+                send(connectFd, returnString, 81, 0);
+            }
+        }
+    }
+    else
+    {
+        //printf("%s\n", "Ekkert ? merki í slóð");
+        send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost/<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", 86, 0);
+    }
 }
 
 void server(session_t* session)
