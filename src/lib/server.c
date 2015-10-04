@@ -74,7 +74,7 @@ void handleGetRequest(int connectFd, char *resource)
             {
                 color = array[1];
                 // html with color
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n", (char *)NULL);
+                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n", (char *)NULL);
                 send(connectFd, returnString, 88, 0);
             }
             else
@@ -89,7 +89,7 @@ void handleGetRequest(int connectFd, char *resource)
     {
         //ekkert spurningamerki í slóð
         // TODO: breyta harðkóðuðum resource, ip og port í rétt...
-        send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost/<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", 86, 0);
+        send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost/<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", 102, 0);
     }
 }
 
@@ -144,7 +144,6 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-        // printf("verb: %s\n", verb);
         // printf("resource: %s\n", resource);
         // printf("---- end of resource -----%s\n");
 
