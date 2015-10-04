@@ -27,7 +27,7 @@ void buildDom(char* data, char* buffer)
 void handleGetRequest(int connectFd, char *resource)
 {
     // TODO: setja inn slóð, ip addressu og port nr
-
+    // 
     GHashTable* parameters;
 
     gchar **seperateByQuestionMark, **seperateByAmpersant;
