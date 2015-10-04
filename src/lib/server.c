@@ -55,32 +55,24 @@ void handleGetRequest(int connectFd, char *resource)
             parameters = g_hash_table_new(g_str_hash, g_str_equal);
 
             int size = g_strv_length(seperateByAmpersant);
-            int i = size;
+            int i;
             parameters = g_hash_table_new(g_str_hash, g_str_equal);
 
             gchar **header;
 
-            send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>", 38, 0);
-            while (i-- > 0)
+            send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost:2000/?arg1=one&arg2=two&arg3=three<br/>\n\t127.0.0.1:1043", 110, 0);
+            for (i = 0; i < size; i++)
             {
                 header  = g_strsplit(seperateByAmpersant[i], "=", 2);
                 g_hash_table_insert(parameters, header[0], header[1]);
                 printf("%s -> %s\n", header[0], header[1]);
 
+                gchar* result = g_strconcat("<br/>\n\t", header[0], " = ", header[1], (char *)NULL);
+                send(connectFd, result, strlen(result), 0);
+
                 //int length = g_strv_length(returnString);
                 //printf("length: %s\n", length);
                 //send(connectFd, returnString, 200, 0);
-
-                // if (i == size)
-                // {
-
-                // }
-                // else
-                // {
-
-                // }
-                
-
 
             }
             send(connectFd, "\n\t<p/>\n<body/>\n<html/>\n", 26, 0);
@@ -101,20 +93,21 @@ void handleGetRequest(int connectFd, char *resource)
                 color = array[1];
                 //printf("color: %s\n", array[1]);
                 // html with color
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n");
+                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n", (char *)NULL);
                 send(connectFd, returnString, 88, 0);
             }
             else
             {
                 // html with parameter
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", array[0], " = ", array[1], "<p/>\n<body/>\n<html/>\n");
+                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", array[0], " = ", array[1], "<p/>\n<body/>\n<html/>\n", (char *)NULL);
                 send(connectFd, returnString, 81, 0);
             }
         }
     }
     else
     {
-        //printf("%s\n", "Ekkert ? merki í slóð");
+        //ekkert spurningamerki í slóð
+        // TODO: breyta harðkóðuðum resource, ip og port í rétt...
         send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost/<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", 86, 0);
     }
 }
