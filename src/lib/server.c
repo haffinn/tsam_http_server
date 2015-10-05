@@ -144,8 +144,8 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-        // printf("resource: %s\n", resource);
-        // printf("---- end of resource -----%s\n");
+        printf("resource: %s\n", resource);
+        printf("---- end of resource -----%s\n");
 
         setSessionHeaders(session, lines);
         setSessionVerb(session, verb);
