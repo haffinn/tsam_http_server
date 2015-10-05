@@ -24,7 +24,7 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
-void handleGetRequest(int connectFd, char *resource)
+void handleGetRequest(session_t* session, int connectFd, char *resource)
 {
     // TODO: setja inn slóð, ip addressu og port nr
     // 
@@ -32,6 +32,16 @@ void handleGetRequest(int connectFd, char *resource)
 
     gchar **seperateByQuestionMark, **seperateByAmpersant;
     gchar *color;
+
+    char* myIp = getIpAdress(session);
+    unsigned short myPort = getPort(session);
+
+    // printf("path: %s\n", session->path);
+    // printf("dir: %s\n", session->directory);
+    // printf("IP: %s\n", myIp);
+    // printf("port: %d\n", myPort);
+    // printf("filename: %s\n", session->filename);
+
 
     // test?arg=foo&arg2=bar   --->   [test], [arg=foo&arg2=bar]
     seperateByQuestionMark = g_strsplit(resource, "?", 2);
@@ -53,7 +63,12 @@ void handleGetRequest(int connectFd, char *resource)
 
             gchar **header;
 
-            send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost:2000/?arg1=one&arg2=two&arg3=three<br/>\n\t127.0.0.1:1043", 110, 0);
+            gchar* result = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", "(TODO - session->path)", resource, "<br/>\n\t", myIp, ":", "(TODO - myPort)", (char *) NULL);
+            send(connectFd, result, strlen(result), 0);
+            // printf("%s\n", result);
+            // fflush(stdout); 
+
+            //send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost:2000/?arg1=one&arg2=two&arg3=three<br/>\n\t127.0.0.1:1043", 110, 0);
             for (i = 0; i < size; i++)
             {
                 header  = g_strsplit(seperateByAmpersant[i], "=", 2);
@@ -63,7 +78,7 @@ void handleGetRequest(int connectFd, char *resource)
                 gchar* result = g_strconcat("<br/>\n\t", header[0], " = ", header[1], (char *)NULL);
                 send(connectFd, result, strlen(result), 0);
             }
-            send(connectFd, "\n\t<p/>\n<body/>\n<html/>\n", 26, 0);
+            send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
         }
         else
         {
@@ -147,6 +162,7 @@ void server(session_t* session)
         // printf("resource: %s\n", resource);
         // printf("---- end of resource -----%s\n");
 
+
         setSessionHeaders(session, lines);
         setSessionVerb(session, verb);
 
@@ -157,7 +173,7 @@ void server(session_t* session)
 
        	    if (session->verb == VERB_GET)
        	    {
-                handleGetRequest(connectFd, resource);
+                handleGetRequest(session, connectFd, resource);
        	    }
         }
         else if (session->verb == VERB_POST)
