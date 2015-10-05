@@ -1,3 +1,4 @@
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -21,12 +22,28 @@ typedef struct session
     int verb;
     int socket_fd;
 
+    struct timeval timer;
+    fd_set read_fds;
     GHashTable* headers;
 
     struct sockaddr_in server;
     struct sockaddr_storage client;
     socklen_t client_size;
 } session_t;
+
+struct timeval newTimer() {
+    struct timeval timer;
+    timer.tv_sec = 30;
+    timer.tv_usec = 0;
+    return timer;
+}
+
+fd_set newReadFds(session_t *session) {
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(session->socket_fd, &rfds);
+    return rfds;
+}
 
 void setSessionHeaders(session_t *session, gchar **lines)
 {
