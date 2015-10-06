@@ -30,7 +30,7 @@ int main(int argc, char **argv)
         .port = atoi(argv[1]),
         .directory = "htdocs",
         .verb = 0,
-        .state = 0 // TODO: Hmmm?
+        .state = 0
     };
 
     session.client_size = sizeof(session.client);

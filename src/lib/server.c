@@ -62,6 +62,9 @@ void server(session_t* session)
     int selectStatus;
     char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
 
+    struct sockaddr_storage remote; // client address
+    socklen_t remoteSize;
+    char remoteIP[INET_ADDRSTRLEN];
 
     for (;;)
     {
@@ -85,6 +88,12 @@ void server(session_t* session)
         		close(session->socket_fd);
         		exit(1);
         	}
+            
+            printf("new connection from %s on socket %d\n",
+                            inet_ntop(remote.ss_family,
+                                &(((struct sockaddr_in*) &remote)->sin_addr),
+                                remoteIP, INET_ADDRSTRLEN),
+                            session->socket_fd);
 
             read(connectFd, buffer, BUFFER_SIZE - 1);
             

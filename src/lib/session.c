@@ -54,7 +54,6 @@ void setSessionHeaders(session_t *session, gchar **lines)
     {
         gchar **header  = g_strsplit(lines[headersCount], ": ", 2);
         g_hash_table_insert(session->headers, header[0], header[1]);
-        printf("%s: %s\n", header[0], header[1]);
     }
 }
 
