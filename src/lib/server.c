@@ -27,6 +27,7 @@ void buildDom(char* data, char* buffer)
 
 void handleGetRequest(int connectFd, char *resource)
 {
+    printf("Get request for %s\n", resource);
     send(connectFd, "<html/>\n", 9, 0);
 }
 
@@ -58,19 +59,15 @@ void server(session_t* session)
     char buffer[BUFFER_SIZE];
     gchar **lines, **tokens, **chunks;
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
-    int connectFd;
     int selectStatus;
     char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
-
-    struct sockaddr_storage remote; // client address
-    socklen_t remoteSize;
-    char remoteIP[INET_ADDRSTRLEN];
 
     for (;;)
     {
         memset(buffer, '\0', BUFFER_SIZE);
         session->timer = newTimer();
         session->read_fds = newReadFds(session);
+
         selectStatus = select(
             session->socket_fd + 1,
             &session->read_fds,
@@ -81,22 +78,9 @@ void server(session_t* session)
 
     	if (selectStatus > 0) {
             assert(FD_ISSET(session->socket_fd, &session->read_fds));
+            acceptNewSession(session);
+            read(session->connection_fd, buffer, BUFFER_SIZE - 1);
 
-            if ((connectFd = accept(session->socket_fd, NULL, NULL)) < 0)
-        	{
-        		perror("Accept failed\n");
-        		close(session->socket_fd);
-        		exit(1);
-        	}
-            
-            printf("new connection from %s on socket %d\n",
-                            inet_ntop(remote.ss_family,
-                                &(((struct sockaddr_in*) &remote)->sin_addr),
-                                remoteIP, INET_ADDRSTRLEN),
-                            session->socket_fd);
-
-            read(connectFd, buffer, BUFFER_SIZE - 1);
-            
             chunks = g_strsplit(buffer, "\r\n\r\n", 2);
             lines = g_strsplit(chunks[0], "\r\n", 20);
             tokens = g_strsplit(lines[0], " ", 3);
@@ -106,39 +90,43 @@ void server(session_t* session)
             setSessionHeaders(session, lines);
             setSessionVerb(session, verb);
 
+            gpointer connection = g_hash_table_lookup(session->headers, "Connection");
+
+            if (connection != NULL)
+            {
+                printf("Connection::%s\n", (char *) connection);
+            }
+
             if (session->verb == VERB_HEAD || session->verb == VERB_GET)
             {
                 logToFile(session, resource, verb, 200);
-           	    send(connectFd, headerOk, strlen(headerOk), 0);
+           	    send(session->connection_fd, headerOk, strlen(headerOk), 0);
 
            	    if (session->verb == VERB_GET)
            	    {
-                    handleGetRequest(connectFd, resource);
+                    handleGetRequest(session->connection_fd, resource);
            	    }
             }
             else if (session->verb == VERB_POST)
             {
                 logToFile(session, resource, verb, 200);
        	        buildDom(chunks[1], buffer);
-           	    send(connectFd, headerOk, strlen(headerOk), 0);
-           	    send(connectFd, buffer, strlen(buffer), 0);
+           	    send(session->connection_fd, headerOk, strlen(headerOk), 0);
+           	    send(session->connection_fd, buffer, strlen(buffer), 0);
             }
             else
             {
                  logToFile(session, resource, verb, 500);
             }
 
-        	if (shutdown(connectFd, SHUT_RDWR) == -1)
-        	{
-        		perror("Shutdown failed\n");
-        		close(connectFd);
-        		close(session->socket_fd);
-        		exit(1);
+        	if (connection != NULL && g_strcmp0(connection, "close")) {
+                closeSession(session);
         	}
-
-        	close(connectFd);
-            g_hash_table_destroy(session->headers);
     	}
+        else if (selectStatus == 0)
+        {
+            closeSession(session);
+        }
     }
 
     close(session->socket_fd);

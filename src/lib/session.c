@@ -1,6 +1,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <unistd.h>
 
 typedef union Number
 {
@@ -21,6 +22,7 @@ typedef struct session
     int state;
     int verb;
     int socket_fd;
+    int connection_fd;
 
     struct timeval timer;
     fd_set read_fds;
@@ -33,7 +35,7 @@ typedef struct session
 
 struct timeval newTimer() {
     struct timeval timer;
-    timer.tv_sec = 30;
+    timer.tv_sec = 3;
     timer.tv_usec = 0;
     return timer;
 }
@@ -47,7 +49,7 @@ fd_set newReadFds(session_t *session) {
 
 void setSessionHeaders(session_t *session, gchar **lines)
 {
-    int headersCount = g_strv_length(lines) - 1;
+    int headersCount = g_strv_length(lines);
     session->headers = g_hash_table_new(g_str_hash, g_str_equal);
 
     while (headersCount-- > 1)
@@ -71,4 +73,31 @@ void setSessionVerb(session_t* session, char* verb)
     {
         session->verb = VERB_POST;
     }
+}
+
+void closeSession(session_t *session) {
+    printf("...Closing connection...\n");
+
+    if (shutdown(session->connection_fd, SHUT_RDWR) == -1)
+	{
+		perror("Shutdown failed\n");
+		close(session->connection_fd);
+		close(session->socket_fd);
+		exit(1);
+	}
+
+	close(session->connection_fd);
+    g_hash_table_destroy(session->headers);
+}
+
+void acceptNewSession(session_t *session)
+{
+    if ((session->connection_fd = accept(session->socket_fd, NULL, NULL)) < 0)
+    {
+        perror("Accept failed\n");
+        close(session->socket_fd);
+        exit(1);
+    }
+
+    printf("new connection on socket %d\n", session->connection_fd);
 }
