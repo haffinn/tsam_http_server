@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 unsigned short getPort(session_t* session) {
     struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
@@ -18,94 +19,145 @@ char* getIpAdress(session_t* session) {
     return p;
 }
 
-void buildDom(char* data, char* buffer)
+// void buildDom(char* data, char* buffer)
+// {
+// 	memset(buffer, 0, BUFFER_SIZE);
+// 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
+// }
+
+void printResource(int connectFd, char* resource, bool isPost, char* buffer)
 {
-	memset(buffer, 0, BUFFER_SIZE);
-	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
+	// TODO: change hardcoded data
+	if (isPost)
+	{
+		char* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>http://localhost", resource, "<br/>\n\t127.0.0.1:2182</p>\n\n\t", buffer, "\n<body/>\n<html/>\n", (gchar*) NULL);
+		send(connectFd, returnString, strlen(returnString), 0);
+	}
+	else
+	{
+		char* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>http://localhost", resource, "<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", (gchar*) NULL);
+		send(connectFd, returnString, strlen(returnString), 0);
+	}
 }
 
-void handleGetRequest(session_t* session, int connectFd, char *resource)
+void checkforparams(int connectFd, bool isColor, gchar* strAfterQuestionMark)
 {
-    // TODO: setja inn slóð, ip addressu og port nr
-    // 
-    GHashTable* parameters;
+	printf("%s\n", "inside checkforparams");
+	gchar** seperateByAmpersant; //, seperateByEqual;
+	GHashTable* parameters = g_hash_table_new(g_str_hash, g_str_equal);
 
-    gchar **seperateByQuestionMark, **seperateByAmpersant;
-    gchar *color;
+	// arg=foo&arg2=bar&arg3=myarg   --->  [arg=foo] [arg2=bar&arg3=myarg]
+	seperateByAmpersant = g_strsplit(strAfterQuestionMark, "&", 2);
+	printf("%s\n", "1");
+	printf("%s\n", seperateByAmpersant[0]);
 
-    char* myIp = getIpAdress(session);
-    unsigned short myPort = getPort(session);
+	// TODO: While setning virkar ekki rétt... :(
+	// TODO: Ef ekkert "&" -> Tjékka ef bara 1 argument
+	while (seperateByAmpersant[1] != NULL)
+	{
+		printf("%s\n", "2");
+		printf("%s\n", seperateByAmpersant[1]);
+		if (g_strcmp0(seperateByAmpersant[1], "") != 0)
+		{
+			printf("%s\n", "3");
+			// Resource includes something like "arg=foo&"
+			// Print 404?
+			printf("%s\n", "Resource includes something like 'arg=foo&'");
+		}
+		else 
+		{
+			printf("%s\n", "4");
+			gchar** arguments = g_strsplit(seperateByAmpersant[0], "=", 2);
 
-    // printf("path: %s\n", session->path);
-    // printf("dir: %s\n", session->directory);
-    // printf("IP: %s\n", myIp);
-    // printf("port: %d\n", myPort);
-    // printf("filename: %s\n", session->filename);
+			if(arguments[1] != NULL)
+			{
+				printf("%s\n", "5");
+				if (g_strcmp0(arguments[1], "") != 0)
+				{
+					printf("%s\n", "6");
+					// Resource includes something like "arg="
+					// Print 404?
+					printf("%s\n", "Resource includes something like 'arg='");
+				}
+				else 
+				{
+					printf("%s\n", "7");
+					if (isColor && g_strcmp0(arguments[0], "bg") == 0)
+					{
+						printf("%s\n", "8");
+						printf("%s\n", "bg spotted");
+						//color = arguments[0];
+						// g_strconcat("<body style=\"background-color:", color, (gchar *)NULL);
 
+					}
+					else 
+					{
+						printf("%s\n", "9");
+						// Add args to HTML
+						g_hash_table_insert(parameters, arguments[0], arguments[1]);
+						gchar* returnString = g_strconcat("<br/>\n\t", arguments[0], " = ", arguments[1], (gchar *)NULL);
+						send(connectFd, returnString, strlen(returnString), 0);
+					}
+				}
+			}
+			printf("%s\n", "10");
+			seperateByAmpersant = g_strsplit(seperateByAmpersant[1], "&", 2);
+		}
+	}
+	printf("%s\n", "done");
+}
 
-    // test?arg=foo&arg2=bar   --->   [test], [arg=foo&arg2=bar]
-    seperateByQuestionMark = g_strsplit(resource, "?", 2);
+void handleURI(session_t* session, int connectFd, char *resource, char* data, char* buffer)
+{
+	gchar **seperateByQM; //, **seperateByAmpersant, **seperateByEqual;
+	// gchar *color;
 
-    if (seperateByQuestionMark[1] != NULL)
-    {
-        gchar* stringAfterSplit = seperateByQuestionMark[1];
+	// char* myIp = getIpAdress(session);
+	// unsigned short myPort = getPort(session);
 
-        // arg=foo&arg2=bar   --->  [arg=foo] [arg2=bar]   
-        seperateByAmpersant = g_strsplit(stringAfterSplit, "&", 100);
+	bool isPost = false;
 
-        if (seperateByAmpersant[1] != NULL)
-        {
-            parameters = g_hash_table_new(g_str_hash, g_str_equal);
+	if (data != NULL)
+	{
+		isPost = true;
+		memset(buffer, 0, BUFFER_SIZE);
+		snprintf(buffer, strlen(data) + 11, "<div>%s</div>", data);
+	}
 
-            int size = g_strv_length(seperateByAmpersant);
-            int i;
-            parameters = g_hash_table_new(g_str_hash, g_str_equal);
+	// test?arg=foo&arg2=bar   --->   [test], [arg=foo&arg2=bar]
+	seperateByQM = g_strsplit(resource, "?", 2);
 
-            gchar **header;
+	if ((seperateByQM[1] != NULL) && (g_strcmp0(seperateByQM[1], "") != 0))
+	{
+		//Eitthvað hægra megin við "?"
+		if (g_strcmp0(seperateByQM[0], "/color") == 0)
+		{
+			// "color" er vinstra megin við "?"
+			checkforparams(connectFd, true, seperateByQM[1]);
+		}
+		else
+		{
+			// Ekki color
+			// Check for parameters
+			checkforparams(connectFd, false, seperateByQM[1]);
+		}
+	}
+	else
+	{
+		//Ekkert hægra megin við "?" eða ekkert "?"
+		// Print resource
+		printf("%s\n", "no '?'");
+	}
+}
 
-            gchar* result = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", "(TODO - session->path)", resource, "<br/>\n\t", myIp, ":", "(TODO - myPort)", (char *) NULL);
-            send(connectFd, result, strlen(result), 0);
-            // printf("%s\n", result);
-            // fflush(stdout); 
+void handleGetRequest(session_t* session, int connectFd, char* resource)
+{
+	handleURI(session, connectFd, resource, NULL, NULL);
+}
 
-            //send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost:2000/?arg1=one&arg2=two&arg3=three<br/>\n\t127.0.0.1:1043", 110, 0);
-            for (i = 0; i < size; i++)
-            {
-                header  = g_strsplit(seperateByAmpersant[i], "=", 2);
-                g_hash_table_insert(parameters, header[0], header[1]);
-                //printf("%s -> %s\n", header[0], header[1]);
-
-                gchar* result = g_strconcat("<br/>\n\t", header[0], " = ", header[1], (char *)NULL);
-                send(connectFd, result, strlen(result), 0);
-            }
-            send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
-        }
-        else
-        {
-            gchar **array;
-            array = g_strsplit(seperateByAmpersant[0], "=", 2);
-
-            if (g_strcmp0(array[0], "bg") == 0)
-            {
-                color = array[1];
-                // html with color
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n", (char *)NULL);
-                send(connectFd, returnString, 88, 0);
-            }
-            else
-            {
-                // html with parameter
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", array[0], " = ", array[1], "<p/>\n<body/>\n<html/>\n", (char *)NULL);
-                send(connectFd, returnString, 81, 0);
-            }
-        }
-    }
-    else
-    {
-        //ekkert spurningamerki í slóð
-        // TODO: breyta harðkóðuðum resource, ip og port í rétt...
-        send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost/<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", 102, 0);
-    }
+void handlePostRequest(session_t* session, int connectFd, char* resource, char* data, char* buffer)
+{
+	handleURI(session, connectFd, resource, data, buffer);
 }
 
 void logToFile(session_t *session, char* resource, char* verb, int responseCode) {
@@ -142,7 +194,8 @@ void server(session_t* session)
 
     for (;;)
     {
-    	g_new0(char, BUFFER_SIZE);
+    	// g_new0(char, BUFFER_SIZE);
+		memset(buffer, 0, BUFFER_SIZE);
 
     	if ((connectFd = accept(session->socket_fd, NULL, NULL)) < 0)
     	{
@@ -179,9 +232,12 @@ void server(session_t* session)
         else if (session->verb == VERB_POST)
         {
             logToFile(session, resource, verb, 200);
-   	        buildDom(chunks[1], buffer);
-       	    send(connectFd, headerOk, strlen(headerOk), 0);
-       	    send(connectFd, buffer, strlen(buffer), 0);
+
+            handlePostRequest(session, connectFd, resource, chunks[1], buffer);
+
+   	        // buildDom(chunks[1], buffer);
+       	    // send(connectFd, headerOk, strlen(headerOk), 0);
+       	    // send(connectFd, buffer, strlen(buffer), 0);
         }
         else
         {
