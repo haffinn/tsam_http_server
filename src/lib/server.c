@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <assert.h>
 
@@ -56,78 +57,159 @@ void logToFile(session_t *session, char* resource, char* verb, int responseCode)
 
 void server(session_t* session)
 {
-    char buffer[BUFFER_SIZE];
     gchar **lines, **tokens, **chunks;
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
-    int selectStatus;
+    char buffer[BUFFER_SIZE];
+    int selectStatus, currentReadFd, readBytes, newSocket;
+    int countSockets = 0;
+    int connectedSockets[200];
+
+    struct timeval timer;
+    timer.tv_sec = 3;
+    timer.tv_usec = 0;
+
+    // TODO: Build dynamically
     char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
 
+    // Setup read file descriptor set and timer for select()
+    fd_set master;
+    FD_ZERO(&master);
+
+    // Keep track of largest file descriptor
+    int listener = createSocket(session->server);
+    int maxFileDescriptor = listener;
+    FD_SET(listener, &master);
+
+    // Remote address info
+    struct sockaddr_storage remoteAddr;
+    char remoteIP[INET_ADDRSTRLEN];
+    socklen_t remoteAddrLen;
+
+    // Main Loop
+    printf("Starting server\n");
     for (;;)
     {
         memset(buffer, '\0', BUFFER_SIZE);
-        session->timer = newTimer();
-        session->read_fds = newReadFds(session);
 
-        selectStatus = select(
-            session->socket_fd + 1,
-            &session->read_fds,
-            NULL,
-            NULL,
-            &session->timer
-        );
+        selectStatus = select(maxFileDescriptor + 1, &master, NULL, NULL, &timer);
 
-    	if (selectStatus > 0) {
-            assert(FD_ISSET(session->socket_fd, &session->read_fds));
-            acceptNewSession(session);
-            read(session->connection_fd, buffer, BUFFER_SIZE - 1);
-
-            chunks = g_strsplit(buffer, "\r\n\r\n", 2);
-            lines = g_strsplit(chunks[0], "\r\n", 20);
-            tokens = g_strsplit(lines[0], " ", 3);
-            strncpy(verb, tokens[0], VERB_SIZE);
-            strncpy(resource, tokens[1], RESOURCE_SIZE);
-
-            setSessionHeaders(session, lines);
-            setSessionVerb(session, verb);
-
-            gpointer connection = g_hash_table_lookup(session->headers, "Connection");
-
-            if (connection != NULL)
-            {
-                printf("Connection::%s\n", (char *) connection);
-            }
-
-            if (session->verb == VERB_HEAD || session->verb == VERB_GET)
-            {
-                logToFile(session, resource, verb, 200);
-           	    send(session->connection_fd, headerOk, strlen(headerOk), 0);
-
-           	    if (session->verb == VERB_GET)
-           	    {
-                    handleGetRequest(session->connection_fd, resource);
-           	    }
-            }
-            else if (session->verb == VERB_POST)
-            {
-                logToFile(session, resource, verb, 200);
-       	        buildDom(chunks[1], buffer);
-           	    send(session->connection_fd, headerOk, strlen(headerOk), 0);
-           	    send(session->connection_fd, buffer, strlen(buffer), 0);
-            }
-            else
-            {
-                 logToFile(session, resource, verb, 500);
-            }
-
-        	if (connection != NULL && g_strcmp0(connection, "close")) {
-                closeSession(session);
-        	}
-    	}
+        if (selectStatus == -1)
+        {
+            fprintf(stderr, "Select failed\n");
+            exit(1);
+        }
         else if (selectStatus == 0)
         {
-            closeSession(session);
+            if (countSockets > 0)
+            {
+                maxFileDescriptor = connectedSockets[--countSockets];
+                close(connectedSockets[countSockets]);
+            }
         }
+        else
+        {
+            for(currentReadFd = 0; currentReadFd <= maxFileDescriptor; currentReadFd++)
+            {
+                if (FD_ISSET(currentReadFd, &master))
+                {
+                    if (currentReadFd == listener)
+                    {
+                        printf("New foo\n");
+
+                        remoteAddrLen = sizeof(remoteAddr);
+                        newSocket = accept(listener, (struct sockaddr *) &remoteAddr, &remoteAddrLen);
+
+                        if (newSocket == -1)
+                        {
+                            perror("accept");
+                            break;
+                        }
+
+                        FD_SET(newSocket, &master);
+
+                        if (newSocket > maxFileDescriptor)
+                        {
+                            maxFileDescriptor = newSocket;
+                        }
+
+                        connectedSockets[countSockets++] = newSocket;
+
+                        getnameinfo((struct sockaddr *) &remoteAddr, remoteAddrLen, remoteIP, sizeof(remoteIP), NULL, 0, NI_NUMERICHOST);
+                        printf("new connection from %s on socket %d\n", remoteIP, newSocket);
+                    }
+                    else
+                    {
+                        readBytes = recv(currentReadFd, buffer, BUFFER_SIZE - 1, 0);
+
+                        if (readBytes <= 0)
+                        {
+                            continue;
+                        }
+
+                        chunks = g_strsplit(buffer, "\r\n\r\n", 2);
+                        lines = g_strsplit(chunks[0], "\r\n", 20);
+                        tokens = g_strsplit(lines[0], " ", 3);
+                        strncpy(verb, tokens[0], VERB_SIZE);
+                        strncpy(resource, tokens[1], RESOURCE_SIZE);
+                        setSessionHeaders(session, lines);
+                        setSessionVerb(session, verb);
+
+                        if (session->verb == VERB_HEAD || session->verb == VERB_GET)
+                        {
+                            logToFile(session, resource, verb, 200);
+                       	    send(currentReadFd, headerOk, strlen(headerOk), 0);
+
+                       	    if (session->verb == VERB_GET)
+                       	    {
+                                handleGetRequest(currentReadFd, resource);
+                       	    }
+                        }
+                        else if (session->verb == VERB_POST)
+                        {
+                            logToFile(session, resource, verb, 200);
+                   	        buildDom(chunks[1], buffer);
+                       	    send(currentReadFd, headerOk, strlen(headerOk), 0);
+                       	    send(currentReadFd, buffer, strlen(buffer), 0);
+                        }
+                        else
+                        {
+                             logToFile(session, resource, verb, 500);
+                        }
+
+                        // gpointer connection = g_hash_table_lookup(session->headers, "Connection");
+                        //
+                        // if (connection != NULL && g_strcmp0(connection, "close") == 0)
+                        // {
+                        //     printf("Close %d from foonat\n", currentReadFd);
+                        //     close(currentReadFd);
+                        //     FD_CLR(currentReadFd, &master);
+                        //     countSockets--;
+                        // }
+                    }
+                }
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            // assert(FD_ISSET(listener, &master));
+            // acceptNewSession(session);
+    	}
     }
 
-    close(session->socket_fd);
+    FD_ZERO(&master);
+    close(listener);
 }

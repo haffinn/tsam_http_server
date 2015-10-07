@@ -35,7 +35,6 @@ int main(int argc, char **argv)
 
     session.client_size = sizeof(session.client);
     session.server = createServer(session.port);
-    session.socket_fd = createSocket(session.server);
 
     server(&session);
     return 0;
