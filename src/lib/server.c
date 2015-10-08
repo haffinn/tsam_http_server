@@ -3,6 +3,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
 
 unsigned short getPort(session_t* session) {
     struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
@@ -24,87 +26,87 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
-void handleGetRequest(session_t* session, int connectFd, char *resource)
+GHashTable* parseQueryString(gchar* queryString)
 {
-    // TODO: setja inn slóð, ip addressu og port nr
-    // 
-    GHashTable* parameters;
-
-    gchar **seperateByQuestionMark, **seperateByAmpersant;
-    gchar *color;
-
-    char* myIp = getIpAdress(session);
-    unsigned short myPort = getPort(session);
-
-    // printf("path: %s\n", session->path);
-    // printf("dir: %s\n", session->directory);
-    // printf("IP: %s\n", myIp);
-    // printf("port: %d\n", myPort);
-    // printf("filename: %s\n", session->filename);
-
-
-    // test?arg=foo&arg2=bar   --->   [test], [arg=foo&arg2=bar]
-    seperateByQuestionMark = g_strsplit(resource, "?", 2);
-
-    if (seperateByQuestionMark[1] != NULL)
+    GHashTable* query = g_hash_table_new(g_str_hash, g_str_equal);
+    
+    if (queryString != NULL)
     {
-        gchar* stringAfterSplit = seperateByQuestionMark[1];
+        gchar** pairs = g_strsplit(queryString, "&", 100);
+        gchar** pair;
+        int size = g_strv_length(pairs), i;
 
-        // arg=foo&arg2=bar   --->  [arg=foo] [arg2=bar]   
-        seperateByAmpersant = g_strsplit(stringAfterSplit, "&", 100);
+        for (i = 0; i < size; i++)
+        {  
+            pair = g_strsplit(pairs[i], "=", 2);
+            g_hash_table_insert(query, pair[0], pair[1]);
+        }
+    }
 
-        if (seperateByAmpersant[1] != NULL)
+    return query;
+}
+
+void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTable* cookieID)
+{
+
+    // TODO: destroy query hash table?
+
+    char buffer[6000];
+    memset(buffer, '\0', 6000);
+    gchar** data = g_strsplit(resource, "?", 2);
+    gchar* file = data[0];
+    GHashTable* query = parseQueryString(data[1]);
+    GList *keys, *values; 
+
+    // TODO: ef slóð er bara localhost:port/ þá skila basic html með ip port og urli
+    if (g_strcmp0(file, "/color") == 0)
+    {
+        gchar* color = g_hash_table_lookup(query, "bg");
+       
+        if (color != NULL)
         {
-            parameters = g_hash_table_new(g_str_hash, g_str_equal);
-
-            int size = g_strv_length(seperateByAmpersant);
-            int i;
-            parameters = g_hash_table_new(g_str_hash, g_str_equal);
-
-            gchar **header;
-
-            gchar* result = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", "(TODO - session->path)", resource, "<br/>\n\t", myIp, ":", "(TODO - myPort)", (char *) NULL);
-            send(connectFd, result, strlen(result), 0);
-            // printf("%s\n", result);
-            // fflush(stdout); 
-
-            //send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost:2000/?arg1=one&arg2=two&arg3=three<br/>\n\t127.0.0.1:1043", 110, 0);
-            for (i = 0; i < size; i++)
-            {
-                header  = g_strsplit(seperateByAmpersant[i], "=", 2);
-                g_hash_table_insert(parameters, header[0], header[1]);
-                //printf("%s -> %s\n", header[0], header[1]);
-
-                gchar* result = g_strconcat("<br/>\n\t", header[0], " = ", header[1], (char *)NULL);
-                send(connectFd, result, strlen(result), 0);
-            }
-            send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
+            g_hash_table_insert(cookieID, &connectFd, color);
         }
         else
         {
-            gchar **array;
-            array = g_strsplit(seperateByAmpersant[0], "=", 2);
-
-            if (g_strcmp0(array[0], "bg") == 0)
+            color = g_hash_table_lookup(cookieID, &connectFd);
+            
+            if (color == NULL)
             {
-                color = array[1];
-                // html with color
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body style=\"background-color:", color, "\">\n<body/>\n<html/>\n", (char *)NULL);
-                send(connectFd, returnString, 88, 0);
-            }
-            else
-            {
-                // html with parameter
-                gchar* returnString = g_strconcat("<!doctype html>\n<html>\n<body>\n\t<p>", array[0], " = ", array[1], "<p/>\n<body/>\n<html/>\n", (char *)NULL);
-                send(connectFd, returnString, 81, 0);
+                color = "white";
             }
         }
+
+        // TODO: ef param líka þá prenta þá
+
+        gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body style=\"background-color: ", color, "\"></body>\r\n</html>\r\n", (char *) NULL);
+        send(connectFd, result, strlen(result), 0);
+    }
+    else if (g_strcmp0(file, "/test") == 0)
+    {
+        // TODO: skoða port og IP   path missing: session->path before resource
+        gchar* topHtml = g_strconcat("<!doctype html>\r\n<html>\r\n<body>\r\n\t<p>", resource, "<br/>\r\n\t", getIpAdress(session), ":", getPort(session), (char *) NULL);
+        send(connectFd, topHtml, strlen(topHtml), 0);
+        
+        keys = g_hash_table_get_keys(query);
+        values = g_hash_table_get_values(query);
+        keys = g_list_reverse(keys);
+        values = g_list_reverse(values);
+        
+        int i, size = g_hash_table_size(query);
+        printf("size of map: %d\n", size);
+
+        for (i = 0; i < size; i++)
+        {
+            // TODO: skoða þessa if setningu
+            gchar* result = g_strconcat("<br/>\n\t", g_list_nth_data (keys, i), " = ", g_list_nth_data (values, i), (char *)NULL);
+            send(connectFd, result, strlen(result), 0);
+        }
+        send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
     }
     else
     {
-        //ekkert spurningamerki í slóð
-        // TODO: breyta harðkóðuðum resource, ip og port í rétt...
-        send(connectFd, "<!doctype html>\n<html>\n<body>\n\t<p>http://localhost/<br/>\n\t127.0.0.1:2182</p>\n<body/>\n<html/>\n", 102, 0);
+        send(connectFd, "<!doctype html>\r\n<html>\r\n<body>\r\n\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n</body>\r\n</html>", 129, 0);
     }
 }
 
@@ -138,6 +140,9 @@ void server(session_t* session)
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
     int connectFd;
 
+    GHashTable* cookies;
+    cookies = g_hash_table_new(g_int_hash, g_str_equal);
+
     char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
 
     for (;;)
@@ -159,9 +164,7 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-        printf("resource: %s\n", resource);
-        printf("---- end of resource -----%s\n");
-
+        //printf("%s\n", chunks[0]);
 
         setSessionHeaders(session, lines);
         setSessionVerb(session, verb);
@@ -173,7 +176,7 @@ void server(session_t* session)
 
        	    if (session->verb == VERB_GET)
        	    {
-                handleGetRequest(session, connectFd, resource);
+                handleGetRequest(session, connectFd, resource, cookies);
        	    }
         }
         else if (session->verb == VERB_POST)
@@ -199,6 +202,6 @@ void server(session_t* session)
     	close(connectFd);
         g_hash_table_destroy(session->headers);
     }
-
+    g_hash_table_destroy(cookies);
     close(session->socket_fd);
 }

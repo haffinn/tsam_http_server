@@ -30,7 +30,7 @@ typedef struct session
 
 void setSessionHeaders(session_t *session, gchar **lines)
 {
-    int headersCount = g_strv_length(lines) - 1;
+    int headersCount = g_strv_length(lines);
     session->headers = g_hash_table_new(g_str_hash, g_str_equal);
 
     while (headersCount-- > 1)
