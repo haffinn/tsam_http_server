@@ -96,7 +96,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
     if (data[1] == NULL && (g_strcmp0(data[0], "/") == 0))
     {
         // TODO: skoða port og IP   path missing: session->path before resource
-        gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+        gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-length:9999\r\nHost:localhost:4074\r\n";
         send(connectFd, headerOk, strlen(headerOk), 0);
 
         gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body><body/>\r\n<html/>\n", (char *) NULL);
@@ -113,8 +113,12 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
             if (color != NULL)
             {
                 hasBG = true;
-                g_hash_table_insert(cookieID, &connectFd, color);
-            
+                gchar* colorHeader = g_strconcat("color=", color, (gchar*) NULL);
+                g_hash_table_insert(session->headers, "Set-Cookie", colorHeader);
+
+                // g_hash_table_insert(cookieID, &connectFd, color);
+            	
+            	
                 // set-cookie
                 //g_hash_table_insert(header, "Set-Cookie", color);
                 //gchar* cookie = g_hash_table_lookup(header, "Set-Cookie");
@@ -127,6 +131,10 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
             {
                 // SKOÐA!!!!
                 color = g_hash_table_lookup(session->headers, "Cookie");
+
+                gchar** colorValue = g_strsplit(color, "=", 2);
+                gchar* myValue = colorValue[1];
+
                 printf("COLOR: %s\n", color);
                 
                 if (color == NULL)
@@ -134,6 +142,11 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
                     //color = "white";
                     gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body>", (char *) NULL);
                     send(connectFd, result, strlen(result), 0);
+                }
+                else
+                {
+                	gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body style=\"background-color: ", myValue, "\">", (char *) NULL);
+               		send(connectFd, result, strlen(result), 0);
                 }
             }
             
@@ -189,7 +202,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
         }
         else
         {
-            gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+            gchar *headerOk = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n";
             send(connectFd, headerOk, strlen(headerOk), 0);
             send(connectFd, "<!doctype html>\r\n<html>\r\n<body>\r\n\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n</body>\r\n</html>", 129, 0);
         }   
