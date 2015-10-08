@@ -26,6 +26,34 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
+void generateHeader(int connectFd, gchar* color, bool hasBG)
+{
+    gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+    gchar *cookie = g_strconcat("Set-Cookie: color=", color, " Max-Age:3600\r\n", (char *) NULL);
+
+    if (hasBG)
+    {
+        gchar *returnString = g_strconcat(headerOk, cookie, "\r\n", (char *) NULL);
+        send(connectFd, returnString, strlen(returnString), 0);
+    }
+    else
+    {
+        gchar *returnString = g_strconcat(headerOk, "\r\n", (char *) NULL);
+        send(connectFd, returnString, strlen(returnString), 0);
+    }
+    // GString *headerString = g_string_sized_new(0);
+    // g_string_append_printf(headerString,"%s", headerOk);
+    // if(user added parameters)
+    // {
+    //     g_string_append_printf(headerString,"Set-Cookie: color=%s; Max-Age:3600\r\n", color);
+    // }
+
+    // g_string_append(headerString, "\r\n");
+
+    // g_string_free(headerString);
+
+}
+
 GHashTable* parseQueryString(gchar* queryString)
 {
     GHashTable* query = g_hash_table_new(g_str_hash, g_str_equal);
@@ -45,7 +73,7 @@ GHashTable* parseQueryString(gchar* queryString)
     return query;
 }
 
-void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTable* cookieID)
+void handleGetRequest(session_t* session, int connectFd, char* resource)
 {
 
     // TODO: destroy query hash table?
@@ -57,7 +85,8 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
     gchar* file = data[0];
     GHashTable* query = parseQueryString(data[1]);
     int size = g_hash_table_size(query);
-    // bool hasBG = false, hasParam = false;
+    bool hasBG = false; 
+    //bool hasParam = false;
     GList *keys = g_hash_table_get_keys(query);
     GList* values = g_hash_table_get_values(query);
     keys = g_list_reverse(keys);
@@ -67,6 +96,9 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
     if (data[1] == NULL && (g_strcmp0(data[0], "/") == 0))
     {
         // TODO: skoða port og IP   path missing: session->path before resource
+        gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+        send(connectFd, headerOk, strlen(headerOk), 0);
+
         gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body><body/>\r\n<html/>\n", (char *) NULL);
         send(connectFd, result, strlen(result), 0);
     }
@@ -75,26 +107,38 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
         if (g_strcmp0(file, "/color") == 0)
         {
             gchar* color = g_hash_table_lookup(query, "bg");
+            //printf("COLOR: %s\n", color);
+            generateHeader(connectFd, color, hasBG);
            
             if (color != NULL)
             {
-                // hasBG = true;
+                hasBG = true;
                 g_hash_table_insert(cookieID, &connectFd, color);
+            
+                // set-cookie
+                //g_hash_table_insert(header, "Set-Cookie", color);
+                //gchar* cookie = g_hash_table_lookup(header, "Set-Cookie");
+                //printf("COOKIE: %s\n", cookie);
+                
+                gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body style=\"background-color: ", color, "\">", (char *) NULL);
+                send(connectFd, result, strlen(result), 0);
             }
             else
             {
-                color = g_hash_table_lookup(cookieID, &connectFd);
+                // SKOÐA!!!!
+                color = g_hash_table_lookup(session->headers, "Cookie");
+                printf("COLOR: %s\n", color);
                 
                 if (color == NULL)
                 {
-                    color = "white";
+                    //color = "white";
+                    gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body>", (char *) NULL);
+                    send(connectFd, result, strlen(result), 0);
                 }
             }
             
+            send(connectFd, "\r\n</body>\r\n</html>\r\n", 22, 0);
             
-            gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body style=\"background-color: ", color, "\">", (char *) NULL);
-            send(connectFd, result, strlen(result), 0);
-
             // // ef param líka, þá prenta þá
             // if (hasBG)
             // {
@@ -125,10 +169,11 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
             //     }
             // }
 
-            send(connectFd, "\r\n</body>\r\n</html>\r\n", 22, 0);
         }
         else if (g_strcmp0(file, "/test") == 0)
         {
+            gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+            send(connectFd, headerOk, strlen(headerOk), 0);
             // TODO: skoða port og IP   path missing: session->path before resource
             gchar* topHtml = g_strconcat("<!doctype html>\r\n<html>\r\n<body>\r\n\t<p>", resource, "<br/>\r\n\t", getIpAdress(session), ":", getPort(session), (char *) NULL);
             send(connectFd, topHtml, strlen(topHtml), 0);
@@ -144,6 +189,8 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
         }
         else
         {
+            gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+            send(connectFd, headerOk, strlen(headerOk), 0);
             send(connectFd, "<!doctype html>\r\n<html>\r\n<body>\r\n\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n</body>\r\n</html>", 129, 0);
         }   
     }
@@ -179,10 +226,24 @@ void server(session_t* session)
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
     int connectFd;
 
-    GHashTable* cookies;
-    cookies = g_hash_table_new(g_int_hash, g_str_equal);
+    //GHashTable* cookies;
+    //cookies = g_hash_table_new(g_int_hash, g_str_equal);
 
-    char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    //char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
+    
+    /* COPYRIGHT HRAFNKELL*/
+    // GString *headerString = g_string_sized_new(0);
+    // g_string_append_printf(headerString,"%s", headerOk);
+    // if(user added parameters)
+    // {
+    //     g_string_append_printf(headerString,"Set-Cookie: color=%s; Max-Age:3600\r\n", color);
+    // }
+
+    // g_string_append(headerString, "\r\n");
+
+    // g_string_free(headerString);
+    /* DONT STEAL, YOU WOULDNT KILL A BABY */
+
 
     for (;;)
     {
@@ -211,18 +272,18 @@ void server(session_t* session)
         if (session->verb == VERB_HEAD || session->verb == VERB_GET)
         {
             logToFile(session, resource, verb, 200);
-       	    send(connectFd, headerOk, strlen(headerOk), 0);
+       	    //send(connectFd, headerOk, strlen(headerOk), 0);
 
        	    if (session->verb == VERB_GET)
        	    {
-                handleGetRequest(session, connectFd, resource, cookies);
+                handleGetRequest(session, connectFd, resource);
        	    }
         }
         else if (session->verb == VERB_POST)
         {
             logToFile(session, resource, verb, 200);
    	        buildDom(chunks[1], buffer);
-       	    send(connectFd, headerOk, strlen(headerOk), 0);
+       	    //send(connectFd, headerOk, strlen(headerOk), 0);
        	    send(connectFd, buffer, strlen(buffer), 0);
         }
         else
@@ -241,6 +302,6 @@ void server(session_t* session)
     	close(connectFd);
         g_hash_table_destroy(session->headers);
     }
-    g_hash_table_destroy(cookies);
+    //g_hash_table_destroy(cookies);
     close(session->socket_fd);
 }
