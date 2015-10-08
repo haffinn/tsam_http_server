@@ -49,6 +49,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
 {
 
     // TODO: destroy query hash table?
+    // TODO: add POST and HEAD - Haffi
 
     char buffer[6000];
     memset(buffer, '\0', 6000);
