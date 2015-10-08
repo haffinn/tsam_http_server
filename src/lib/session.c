@@ -21,13 +21,15 @@ typedef struct session
     int port;
     int state;
     int verb;
-    int socket_fd;
+    int listener;
     int connection_fd;
 
     struct timeval timer;
+    
     fd_set read_fds;
     GHashTable* headers;
-
+    GQueue *q;
+    
     struct sockaddr_in server;
     struct sockaddr_storage client;
     socklen_t client_size;
@@ -40,10 +42,9 @@ struct timeval newTimer() {
     return timer;
 }
 
-fd_set newReadFds(session_t *session) {
+fd_set newFdSet() {
     fd_set rfds;
     FD_ZERO(&rfds);
-    FD_SET(session->socket_fd, &rfds);
     return rfds;
 }
 
@@ -75,29 +76,3 @@ void setSessionVerb(session_t* session, char* verb)
     }
 }
 
-void closeSession(session_t *session) {
-    printf("...Closing connection...\n");
-
-    if (shutdown(session->connection_fd, SHUT_RDWR) == -1)
-	{
-		perror("Shutdown failed\n");
-		close(session->connection_fd);
-		close(session->socket_fd);
-		exit(1);
-	}
-
-	close(session->connection_fd);
-    g_hash_table_destroy(session->headers);
-}
-
-void acceptNewSession(session_t *session)
-{
-    if ((session->connection_fd = accept(session->socket_fd, NULL, NULL)) < 0)
-    {
-        perror("Accept failed\n");
-        close(session->socket_fd);
-        exit(1);
-    }
-
-    printf("new connection on socket %d\n", session->connection_fd);
-}

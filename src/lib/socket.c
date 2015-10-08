@@ -31,7 +31,7 @@ int createSocket(struct sockaddr_in server)
         exit(1);
     }
 
-    if (listen(sockfd, 1) == -1)
+    if (listen(sockfd, 20) == -1)
     {
         perror("Listen failed\n");
         close(sockfd);
