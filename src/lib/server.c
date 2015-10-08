@@ -42,7 +42,6 @@ GHashTable* parseQueryString(gchar* queryString)
             g_hash_table_insert(query, pair[0], pair[1]);
         }
     }
-
     return query;
 }
 
@@ -56,57 +55,96 @@ void handleGetRequest(session_t* session, int connectFd, char* resource, GHashTa
     gchar** data = g_strsplit(resource, "?", 2);
     gchar* file = data[0];
     GHashTable* query = parseQueryString(data[1]);
-    GList *keys, *values; 
+    int size = g_hash_table_size(query);
+    // bool hasBG = false, hasParam = false;
+    GList *keys = g_hash_table_get_keys(query);
+    GList* values = g_hash_table_get_values(query);
+    keys = g_list_reverse(keys);
+    values = g_list_reverse(values);
 
-    // TODO: ef slóð er bara localhost:port/ þá skila basic html með ip port og urli
-    if (g_strcmp0(file, "/color") == 0)
-    {
-        gchar* color = g_hash_table_lookup(query, "bg");
-       
-        if (color != NULL)
-        {
-            g_hash_table_insert(cookieID, &connectFd, color);
-        }
-        else
-        {
-            color = g_hash_table_lookup(cookieID, &connectFd);
-            
-            if (color == NULL)
-            {
-                color = "white";
-            }
-        }
-
-        // TODO: ef param líka þá prenta þá
-
-        gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body style=\"background-color: ", color, "\"></body>\r\n</html>\r\n", (char *) NULL);
-        send(connectFd, result, strlen(result), 0);
-    }
-    else if (g_strcmp0(file, "/test") == 0)
+    // if resource is empty, like this: localhost:port/
+    if (data[1] == NULL && (g_strcmp0(data[0], "/") == 0))
     {
         // TODO: skoða port og IP   path missing: session->path before resource
-        gchar* topHtml = g_strconcat("<!doctype html>\r\n<html>\r\n<body>\r\n\t<p>", resource, "<br/>\r\n\t", getIpAdress(session), ":", getPort(session), (char *) NULL);
-        send(connectFd, topHtml, strlen(topHtml), 0);
-        
-        keys = g_hash_table_get_keys(query);
-        values = g_hash_table_get_values(query);
-        keys = g_list_reverse(keys);
-        values = g_list_reverse(values);
-        
-        int i, size = g_hash_table_size(query);
-        printf("size of map: %d\n", size);
-
-        for (i = 0; i < size; i++)
-        {
-            // TODO: skoða þessa if setningu
-            gchar* result = g_strconcat("<br/>\n\t", g_list_nth_data (keys, i), " = ", g_list_nth_data (values, i), (char *)NULL);
-            send(connectFd, result, strlen(result), 0);
-        }
-        send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
+        gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body><body/>\r\n<html/>\n", (char *) NULL);
+        send(connectFd, result, strlen(result), 0);
     }
     else
     {
-        send(connectFd, "<!doctype html>\r\n<html>\r\n<body>\r\n\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n</body>\r\n</html>", 129, 0);
+        if (g_strcmp0(file, "/color") == 0)
+        {
+            gchar* color = g_hash_table_lookup(query, "bg");
+           
+            if (color != NULL)
+            {
+                // hasBG = true;
+                g_hash_table_insert(cookieID, &connectFd, color);
+            }
+            else
+            {
+                color = g_hash_table_lookup(cookieID, &connectFd);
+                
+                if (color == NULL)
+                {
+                    color = "white";
+                }
+            }
+            
+            
+            gchar* result = g_strconcat("<!doctype html>\r\n<html>\r\n<body style=\"background-color: ", color, "\">", (char *) NULL);
+            send(connectFd, result, strlen(result), 0);
+
+            // // ef param líka, þá prenta þá
+            // if (hasBG)
+            // {
+            //     if (g_hash_table_size(query) > 1)
+            //     {
+            //         hasParam = true;
+            //     }
+            // }
+            // else
+            // {
+            //     if (g_hash_table_size(query) > 0)
+            //     {
+            //         hasParam = true;
+            //     }
+            // }
+
+            // if (hasParam)
+            // {
+            //     int i;
+
+            //     for (i = 0; i < size; i++)
+            //     {
+            //         if (!g_strcmp0(g_list_nth_data (keys, i), "bg") == 0)
+            //         {
+            //             gchar* result = g_strconcat("<br/>\n\t", g_list_nth_data (keys, i), " = ", g_list_nth_data (values, i), (char *)NULL);
+            //             send(connectFd, result, strlen(result), 0);
+            //         }
+            //     }
+            // }
+
+            send(connectFd, "\r\n</body>\r\n</html>\r\n", 22, 0);
+        }
+        else if (g_strcmp0(file, "/test") == 0)
+        {
+            // TODO: skoða port og IP   path missing: session->path before resource
+            gchar* topHtml = g_strconcat("<!doctype html>\r\n<html>\r\n<body>\r\n\t<p>", resource, "<br/>\r\n\t", getIpAdress(session), ":", getPort(session), (char *) NULL);
+            send(connectFd, topHtml, strlen(topHtml), 0);
+            
+            int i;
+            
+            for (i = 0; i < size; i++)
+            {
+                gchar* result = g_strconcat("<br/>\n\t", g_list_nth_data (keys, i), " = ", g_list_nth_data (values, i), (char *)NULL);
+                send(connectFd, result, strlen(result), 0);
+            }
+            send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
+        }
+        else
+        {
+            send(connectFd, "<!doctype html>\r\n<html>\r\n<body>\r\n\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n</body>\r\n</html>", 129, 0);
+        }   
     }
 }
 
