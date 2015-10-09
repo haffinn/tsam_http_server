@@ -1,3 +1,7 @@
 src/httpd
 src/log
 src/httpd.dSYM
+
+src/httpd.log
+
+src/httpd
