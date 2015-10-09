@@ -26,7 +26,7 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
-void generateDOM(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables, GString* header)
+void generateDOM(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables, GString* header, char* postData)
 {
 	GString* DOM = g_string_sized_new (0);
 
@@ -83,7 +83,10 @@ void generateDOM(session_t* session, int connectFd, char* resource, gchar* color
 		g_string_append_printf(DOM, "%s", "\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n");
 	}
 
-
+	if (session->verb == VERB_POST)
+	{
+		g_string_append_printf(DOM, "\t<div>%s</div>\n", postData);
+	}
 	g_string_append_printf(DOM, "%s", "</body>\r\n</html>");
 
 	// printf("#######Header: \n '%s'\n", header->str);
@@ -91,16 +94,20 @@ void generateDOM(session_t* session, int connectFd, char* resource, gchar* color
 
 	g_string_append_printf(header, "Content-Length: %lu\r\n\r\n", DOM->len);
 
-
-	send(connectFd, header->str, header->len, 0);
-
-	// TODO bara senda ef GET/POST - Ekki ef HEAD
-	send(connectFd, DOM->str, DOM->len, 0);
+	if (session->verb == VERB_HEAD)
+	{
+		send(connectFd, header->str, header->len, 0);
+	}
+	if (session->verb == VERB_GET || session->verb == VERB_POST)
+	{
+		send(connectFd, header->str, header->len, 0);
+		send(connectFd, DOM->str, DOM->len, 0);
+	}
 
 	// Todo free up GString objects...
 }
 
-void generateResponse(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables)
+void generateResponse(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables, char* postData)
 {
 	GString* header = g_string_sized_new(0);
 	if(g_strcmp0(statusCode, "200") == 0)
@@ -115,7 +122,7 @@ void generateResponse(session_t* session, int connectFd, char* resource, gchar* 
 	{
 		g_string_append_printf(header,"%s", "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n");
 	}
-	generateDOM(session, connectFd, resource, color, hasBG, statusCode, isSlashTest, variables, header);
+	generateDOM(session, connectFd, resource, color, hasBG, statusCode, isSlashTest, variables, header, postData);
 }
 
 GHashTable* parseQueryString(gchar* queryString)
@@ -137,14 +144,11 @@ GHashTable* parseQueryString(gchar* queryString)
     return query;
 }
 
-void handleGetRequest(session_t* session, int connectFd, char* resource)
+void handleRequest(session_t* session, int connectFd, char* resource, char* postData)
 {
 
     // TODO: destroy query hash table?
     // TODO: add POST and HEAD - Haffi
-
-    // char buffer[6000];
-    // memset(buffer, '\0', 6000);
 
     gchar** data = g_strsplit(resource, "?", 2);
     gchar* file = data[0];
@@ -153,16 +157,12 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
     bool hasBG = false;
     bool isSlashTest = false;
 
-    // GList *keys = g_hash_table_get_keys(query);
-    // GList* values = g_hash_table_get_values(query);
-    // keys = g_list_reverse(keys);
-    // values = g_list_reverse(values);
 
     // if resource is empty, like this: localhost:port/
     if (data[1] == NULL && (g_strcmp0(data[0], "/") == 0))
     {
         // TODO: skoða port og IP   path missing: session->path before resource
-        generateResponse(session, connectFd, resource, NULL, false, "200", isSlashTest, query);
+        generateResponse(session, connectFd, resource, NULL, false, "200", isSlashTest, query, postData);
 
     }
     else
@@ -175,7 +175,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
             {
             	// URI contains /color?bg=x
                 hasBG = true;
-                generateResponse(session, connectFd, resource, color, hasBG, "200", isSlashTest, query);
+                generateResponse(session, connectFd, resource, color, hasBG, "200", isSlashTest, query, postData);
             }
             else
             {
@@ -186,7 +186,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
                
                 if (color == NULL)
                 {
-                    generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query);
+                    generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query, postData);
                 }
                 else
                 {
@@ -196,7 +196,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
                 	if (colorValue[1] != NULL)
                 	{
                 		gchar* myColor = colorValue[1];
-                		generateResponse(session, connectFd, resource, myColor, hasBG, "200", isSlashTest, query);
+                		generateResponse(session, connectFd, resource, myColor, hasBG, "200", isSlashTest, query, postData);
                 	}
                 	// Skoða --- gerist eitthvað hér?
                 }
@@ -205,11 +205,11 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
         else if (g_strcmp0(file, "/test") == 0)
         {
         	isSlashTest = true;
-        	generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query);
+        	generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query, postData);
         }
         else
         {
-        	generateResponse(session, connectFd, resource, NULL, false, "200", isSlashTest, query);
+        	generateResponse(session, connectFd, resource, NULL, false, "404", isSlashTest, query, postData);
         }   
     }
 }
@@ -244,24 +244,6 @@ void server(session_t* session)
     char verb[VERB_SIZE], resource[RESOURCE_SIZE];
     int connectFd;
 
-    //GHashTable* cookies;
-    //cookies = g_hash_table_new(g_int_hash, g_str_equal);
-
-    //char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
-    
-    /* COPYRIGHT HRAFNKELL*/
-    // GString *headerString = g_string_sized_new(0);
-    // g_string_append_printf(headerString,"%s", headerOk);
-    // if(user added parameters)
-    // {
-    //     g_string_append_printf(headerString,"Set-Cookie: color=%s; Max-Age:3600\r\n", color);
-    // }
-
-    // g_string_append(headerString, "\r\n");
-
-    // g_string_free(headerString);
-    /* DONT STEAL, YOU WOULDNT KILL A BABY */
-
 
     for (;;)
     {
@@ -282,27 +264,24 @@ void server(session_t* session)
         strncpy(verb, tokens[0], VERB_SIZE);
         strncpy(resource, tokens[1], RESOURCE_SIZE);
 
-        //printf("%s\n", chunks[0]);
-
         setSessionHeaders(session, lines);
         setSessionVerb(session, verb);
 
         if (session->verb == VERB_HEAD || session->verb == VERB_GET)
         {
             logToFile(session, resource, verb, 200);
-       	    //send(connectFd, headerOk, strlen(headerOk), 0);
 
        	    if (session->verb == VERB_GET)
        	    {
-                handleGetRequest(session, connectFd, resource);
+                handleRequest(session, connectFd, resource, NULL);
        	    }
         }
         else if (session->verb == VERB_POST)
         {
             logToFile(session, resource, verb, 200);
-   	        buildDom(chunks[1], buffer);
-       	    //send(connectFd, headerOk, strlen(headerOk), 0);
-       	    send(connectFd, buffer, strlen(buffer), 0);
+            handleRequest(session, connectFd, resource, chunks[1]);
+   	        // buildDom(chunks[1], buffer);
+       	    // send(connectFd, buffer, strlen(buffer), 0);
         }
         else
         {
