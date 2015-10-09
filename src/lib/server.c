@@ -469,14 +469,14 @@ void server(session_t* session)
 
                     if (session->verb == VERB_GET)
                     {
-                        handleGetRequest(currentReadFd, resource);
+                        handleGetRequest(session, currentReadFd, resource);
                     }
                 }
                 else if (session->verb == VERB_POST)
                 {
                     logToFile(remoteIP, session->port, resource, verb, 200);
                     buildDom(chunks[1], buffer);
-                    send(connectFd, buffer, strlen(buffer), 0);
+                    send(currentReadFd, buffer, strlen(buffer), 0);
                 }
                 else
                 {
