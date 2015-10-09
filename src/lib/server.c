@@ -134,26 +134,33 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
            
             if (color != NULL)
             {
+            	// URI contains /color?bg=x
                 hasBG = true;
                 generateResponse(connectFd, color, hasBG, "200", query);
             }
             else
             {
                 // SKOÐA!!!!
+
+                // URI does not contains bg=(...)
+                // Check if request contains cookie
+                // Cookie:color=red ---> [color = color=red]
                 color = g_hash_table_lookup(session->headers, "Cookie");
-
-                gchar** colorValue = g_strsplit(color, "=", 2);
-                gchar* myValue = colorValue[1];
-
-                printf("COLOR: %s\n", color);
-                
+               
                 if (color == NULL)
                 {
                     generateResponse(connectFd, NULL, false, "200", query);
                 }
                 else
                 {
-                	generateResponse(connectFd, color, true, "200", query);
+                	// color=red ---> [color] [red]
+                	gchar** colorValue = g_strsplit(color, "=", 2);
+                	if (colorValue[1] != NULL)
+                	{
+                		gchar* myColor = colorValue[1];
+                		generateResponse(connectFd, myColor, true, "200", query);
+                	}
+                	// Skoða --- gerist eitthvað hér?
                 }
             }
         }
