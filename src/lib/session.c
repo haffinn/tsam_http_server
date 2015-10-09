@@ -2,6 +2,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <string.h>
 
 typedef union Number
 {
@@ -29,6 +32,7 @@ typedef struct session
     
     fd_set read_fds;
     GHashTable* headers;
+    GHashTable* connections;
     GQueue *q;
     
     struct sockaddr_in server;
@@ -77,8 +81,11 @@ void setSessionVerb(session_t* session, char* verb)
     }
 }
 
-int newConnection(session_t* session, struct sockaddr_storage remoteAddr, socklen_t remoteAddrLen)
+int newConnection(session_t* session)
 {
+    struct sockaddr_storage remoteAddr;
+    char remoteIP[INET_ADDRSTRLEN];
+    socklen_t remoteAddrLen = sizeof(remoteAddr);
     int newSocket = accept(session->listener, (struct sockaddr *) &remoteAddr, &remoteAddrLen);
 
     if (newSocket == -1)
@@ -95,5 +102,13 @@ int newConnection(session_t* session, struct sockaddr_storage remoteAddr, sockle
         session->maxFd = newSocket;
     }
 
+    getnameinfo((struct sockaddr *) &remoteAddr, remoteAddrLen, remoteIP, sizeof(remoteIP), NULL, 0, NI_NUMERICHOST);
+    connection_t *c = malloc(sizeof(connection_t));
+
+    c->socket = newSocket;
+    c->port = session->port;
+    memcpy(c->ip, remoteIP, INET_ADDRSTRLEN);
+
+    g_hash_table_insert(session->connections, GINT_TO_POINTER(newSocket), c);
     return newSocket;
 }

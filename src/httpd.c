@@ -1,6 +1,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <glib.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 #define VERB_DEFAULT 0
 #define VERB_GET 1
@@ -10,6 +16,13 @@
 #define PROTOCOL_SIZE 10
 #define VERB_SIZE 25
 #define RESOURCE_SIZE 255
+
+typedef struct connection
+{
+    int socket;
+    int port;
+    char ip[INET_ADDRSTRLEN];
+} connection_t;
 
 #include "lib/session.c"
 #include "lib/socket.c"

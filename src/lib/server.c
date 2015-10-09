@@ -319,21 +319,27 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
     }
 }
 
-void logToFile(char *ip, int port, char* resource, char* verb, int responseCode) {
+void logToFile(session_t* session, int socket, char* resource, char* verb, int responseCode) {
     FILE* file = fopen("log", "a");
+    connection_t *c =(connection_t *)g_hash_table_lookup(session->connections, GINT_TO_POINTER(socket));
+
+    if (c == NULL)
+    {
+        return;
+    }
 
     if (file == NULL) {
         perror("Failed to open logfile.\n");
-        exit(1);
+        return;
     }
 
     GTimeVal tv;
     g_get_current_time(&tv);
+    tv.tv_usec = 0;
     gchar *timestr = g_time_val_to_iso8601(&tv);
 
     // Print to file (append)
-    fprintf(file, "%s : %s:%d %s\n", timestr, ip, port, verb);
-
+    fprintf(file, "%s : %s:%d %s\n", timestr, c->ip, c->port, verb);
     fprintf(file, "%s : %d\n", resource, responseCode);
 
     // Free resources
@@ -396,11 +402,8 @@ void server(session_t* session)
     // Keep track of largest file descriptor
     session->listener = createSocket(session->server);
     session->maxFd = session->listener;
+    session->connections = g_hash_table_new (g_direct_hash, g_direct_equal);
     FD_SET(session->listener, &session->read_fds);
-    
-    // Remote address info
-    struct sockaddr_storage remoteAddr;
-    char remoteIP[INET_ADDRSTRLEN];
 
     // Main Loop
     for (;;)
@@ -430,12 +433,10 @@ void server(session_t* session)
             {
                 continue;
             }
-            
-            socklen_t remoteAddrLen = sizeof(remoteAddr);
 
             if (currentReadFd == session->listener)
             {
-                newConnection(session, remoteAddr, remoteAddrLen);
+                newConnection(session);
             }
             else
             {
@@ -444,7 +445,6 @@ void server(session_t* session)
                 memset(resource, '\0', RESOURCE_SIZE);
                 memset(protocol, '\0', PROTOCOL_SIZE);
 
-                getnameinfo((struct sockaddr *) &remoteAddr, remoteAddrLen, remoteIP, sizeof(remoteIP), NULL, 0, NI_NUMERICHOST);
                 readBytes = recv(currentReadFd, buffer, BUFFER_SIZE - 1, 0);;
 
                 if (readBytes <= 0)
@@ -465,7 +465,7 @@ void server(session_t* session)
 
                 if (session->verb == VERB_HEAD || session->verb == VERB_GET)
                 {
-                    logToFile(remoteIP, session->port, resource, verb, 200);
+                    logToFile(session, currentReadFd, resource, verb, 200);
 
                     if (session->verb == VERB_GET)
                     {
@@ -474,13 +474,13 @@ void server(session_t* session)
                 }
                 else if (session->verb == VERB_POST)
                 {
-                    logToFile(remoteIP, session->port, resource, verb, 200);
+                    logToFile(session, currentReadFd, resource, verb, 200);
                     buildDom(chunks[1], buffer);
                     send(currentReadFd, buffer, strlen(buffer), 0);
                 }
                 else
                 {
-                    logToFile(remoteIP, session->port, resource, verb, 200);
+                    logToFile(session, currentReadFd, resource, verb, 200);
                 }
 
                 gchar* connection = (gchar *) g_hash_table_lookup(session->headers, "Connection");
@@ -496,6 +496,7 @@ void server(session_t* session)
         }
     }
 
+    g_hash_table_destroy(session->connections);
     FD_ZERO(&session->read_fds);
     close(session->listener);
 }

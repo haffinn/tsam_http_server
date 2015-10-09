@@ -3,6 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 struct sockaddr_in createServer(int port)
 {
