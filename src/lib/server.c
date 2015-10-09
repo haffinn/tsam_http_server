@@ -194,23 +194,29 @@ void handleRequest(session_t* session, int connectFd, char* resource, char* post
                 // URI does not contains bg=(...)
                 // Check if request contains cookie
                 // Cookie:color=red ---> [color = color=red]
-                color = g_hash_table_lookup(session->headers, "Cookie");
-                
+                gchar* cookie = g_hash_table_lookup(session->headers, "Cookie");
+
                
-                if (color == NULL)
+                if (cookie == NULL)
                 {
                     generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query, postData);
                 }
                 else
                 {
-                	hasBG = true;
-                	// colorvalue(key, value) ---> [color] [red]
-                	gchar** cookie = g_strsplit(color, "=", 2);
-                	if (cookie[1] != NULL)
-                	{
-                		gchar* myColor = cookie[1];
-                		generateResponse(session, connectFd, resource, myColor, hasBG, "200", isSlashTest, query, postData);
-                	}
+                    gchar **pairs = g_strsplit(cookie, "; ", 100);
+                    gchar** pair;
+                    int size = g_strv_length(pairs), i;
+
+                    for (i = 0; i < size; i++)
+                    {  
+                        pair = g_strsplit(pairs[i], "=", 2);
+
+                        if (g_strcmp0(pair[0], "color") == 0)
+                        {                       
+                            generateResponse(session, connectFd, resource, pair[1], 1, "200", isSlashTest, query, postData);
+                            break;
+                        }
+                    }
                 }
             }
         }
