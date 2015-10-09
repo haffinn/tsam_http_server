@@ -195,6 +195,7 @@ void handleRequest(session_t* session, int connectFd, char* resource, char* post
                 // Check if request contains cookie
                 // Cookie:color=red ---> [color = color=red]
                 color = g_hash_table_lookup(session->headers, "Cookie");
+                
                
                 if (color == NULL)
                 {
@@ -203,14 +204,13 @@ void handleRequest(session_t* session, int connectFd, char* resource, char* post
                 else
                 {
                 	hasBG = true;
-                	// color=red ---> [color] [red]
-                	gchar** colorValue = g_strsplit(color, "=", 2);
-                	if (colorValue[1] != NULL)
+                	// colorvalue(key, value) ---> [color] [red]
+                	gchar** cookie = g_strsplit(color, "=", 2);
+                	if (cookie[1] != NULL)
                 	{
-                		gchar* myColor = colorValue[1];
+                		gchar* myColor = cookie[1];
                 		generateResponse(session, connectFd, resource, myColor, hasBG, "200", isSlashTest, query, postData);
                 	}
-                	// Skoða --- gerist eitthvað hér?
                 }
             }
         }
@@ -272,8 +272,6 @@ void server(session_t* session)
     char buffer[BUFFER_SIZE];
     int selectStatus, currentReadFd, readBytes;
 
-    // Queue containing connected stream sockets in LRU.
-    // Least recently used connection is last.
     session->q = g_queue_new();
 
     struct timeval timer;
@@ -352,18 +350,12 @@ void server(session_t* session)
                 if (session->verb == VERB_HEAD || session->verb == VERB_GET)
                 {
                     logToFile(session, currentReadFd, resource, verb, 200);
-
-                    if (session->verb == VERB_GET)
-                    {
-                        handleRequest(session, currentReadFd, resource, NULL);
-                    }
+                    handleRequest(session, currentReadFd, resource, NULL);
                 }
                 else if (session->verb == VERB_POST)
                 {
                     logToFile(session, currentReadFd, resource, verb, 200);
                     handleRequest(session, currentReadFd, resource, chunks[1]);
-                    // buildDom(chunks[1], buffer);
-                    // send(currentReadFd, buffer, strlen(buffer), 0);
                 }
                 else
                 {
