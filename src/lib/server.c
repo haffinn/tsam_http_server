@@ -26,7 +26,7 @@ void buildDom(char* data, char* buffer)
 	snprintf(buffer, strlen(data) + 64, "<!doctype html>\n<html>\n<body>\n\t<div>%s</div>\n</body>\n</html>", data);
 }
 
-void generateDOM(int connectFd, gchar* color, bool hasBG, gchar* statusCode, GHashTable* variables, GString* header)
+void generateDOM(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables, GString* header)
 {
 	GString* DOM = g_string_sized_new (0);
 
@@ -42,15 +42,52 @@ void generateDOM(int connectFd, gchar* color, bool hasBG, gchar* statusCode, GHa
 		{
 			g_string_append_printf(DOM, "%s", "<body>");
 		}
+
+		// TODO --  ATH GetIP Addr og getport virkar ekki :/
+		// Laga þetta html - það er eitthvað pínu skrítið held ég...
+		gchar* host = g_hash_table_lookup(session->headers, "Host");
+		g_string_append_printf(DOM, "\r\n\t%s%s \r\n\t%s:%d\r\n", host, resource, getIpAdress(session), getPort(session));
+
+		if (isSlashTest)
+		{
+			GList* keys = g_hash_table_get_keys(variables);
+			GList* values = g_hash_table_get_values(variables);
+
+			int size = g_hash_table_size(variables);
+			int i;
+
+			for (i = 0; i < size; i++)
+			{
+				gchar* key = g_list_nth_data(keys, i);
+				gchar* val = g_list_nth_data(values, i);
+				printf("\nite: %d\n", i);
+				printf("key: %s\n", key);
+				printf("val: %s\n", val);
+				if (i == 0)
+				{
+					g_string_append_printf(DOM, "\n\t%s = %s<br/>\n\t", key, val);
+				}
+				else 
+				{
+					g_string_append_printf(DOM, "%s = %s<br/>\n\t", key, val);
+				}
+			}
+			g_string_append_printf(DOM, "%s", "\r");
+
+			g_list_free_1(keys);
+			g_list_free_1(values);
+		}
 	}
 	else if(g_strcmp0(statusCode, "404") == 0)
 	{
 		g_string_append_printf(DOM, "%s", "\t<h2>404</h2>\r\n\t<p>Oops! The page you requested was not found!</p>\r\n");
 	}
+
+
 	g_string_append_printf(DOM, "%s", "</body>\r\n</html>");
 
-	printf("#######Header: \n '%s'\n", header->str);
-	printf("#######HTML: \n '%s'\n", DOM->str);
+	// printf("#######Header: \n '%s'\n", header->str);
+	// printf("#######HTML: \n '%s'\n", DOM->str);
 
 	g_string_append_printf(header, "Content-Length: %lu\r\n\r\n", DOM->len);
 
@@ -59,16 +96,16 @@ void generateDOM(int connectFd, gchar* color, bool hasBG, gchar* statusCode, GHa
 
 	// TODO bara senda ef GET/POST - Ekki ef HEAD
 	send(connectFd, DOM->str, DOM->len, 0);
+
+	// Todo free up GString objects...
 }
 
-void generateResponse(int connectFd, gchar* color, bool hasBG, gchar* statusCode, GHashTable* variables)
+void generateResponse(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables)
 {
 	GString* header = g_string_sized_new(0);
 	if(g_strcmp0(statusCode, "200") == 0)
 	{
 		g_string_append_printf(header, "%s", "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nMax-Age: 3600\r\n");
-		// header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nMax-Age: 3600\r\n";
-
 		if (hasBG)
 		{
 			g_string_append_printf (header, "Set-Cookie: color=%s\r\n", color);
@@ -78,13 +115,13 @@ void generateResponse(int connectFd, gchar* color, bool hasBG, gchar* statusCode
 	{
 		g_string_append_printf(header,"%s", "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n");
 	}
-	generateDOM(connectFd, color, hasBG, statusCode, variables, header);
+	generateDOM(session, connectFd, resource, color, hasBG, statusCode, isSlashTest, variables, header);
 }
 
 GHashTable* parseQueryString(gchar* queryString)
 {
     GHashTable* query = g_hash_table_new(g_str_hash, g_str_equal);
-    
+
     if (queryString != NULL)
     {
         gchar** pairs = g_strsplit(queryString, "&", 100);
@@ -106,24 +143,26 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
     // TODO: destroy query hash table?
     // TODO: add POST and HEAD - Haffi
 
-    char buffer[6000];
-    memset(buffer, '\0', 6000);
+    // char buffer[6000];
+    // memset(buffer, '\0', 6000);
+
     gchar** data = g_strsplit(resource, "?", 2);
     gchar* file = data[0];
     GHashTable* query = parseQueryString(data[1]);
-    int size = g_hash_table_size(query);
-    bool hasBG = false; 
-    //bool hasParam = false;
-    GList *keys = g_hash_table_get_keys(query);
-    GList* values = g_hash_table_get_values(query);
-    keys = g_list_reverse(keys);
-    values = g_list_reverse(values);
+
+    bool hasBG = false;
+    bool isSlashTest = false;
+
+    // GList *keys = g_hash_table_get_keys(query);
+    // GList* values = g_hash_table_get_values(query);
+    // keys = g_list_reverse(keys);
+    // values = g_list_reverse(values);
 
     // if resource is empty, like this: localhost:port/
     if (data[1] == NULL && (g_strcmp0(data[0], "/") == 0))
     {
         // TODO: skoða port og IP   path missing: session->path before resource
-        generateResponse(connectFd, NULL, false, "200", query);
+        generateResponse(session, connectFd, resource, NULL, false, "200", isSlashTest, query);
 
     }
     else
@@ -136,12 +175,10 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
             {
             	// URI contains /color?bg=x
                 hasBG = true;
-                generateResponse(connectFd, color, hasBG, "200", query);
+                generateResponse(session, connectFd, resource, color, hasBG, "200", isSlashTest, query);
             }
             else
             {
-                // SKOÐA!!!!
-
                 // URI does not contains bg=(...)
                 // Check if request contains cookie
                 // Cookie:color=red ---> [color = color=red]
@@ -149,16 +186,17 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
                
                 if (color == NULL)
                 {
-                    generateResponse(connectFd, NULL, false, "200", query);
+                    generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query);
                 }
                 else
                 {
+                	hasBG = true;
                 	// color=red ---> [color] [red]
                 	gchar** colorValue = g_strsplit(color, "=", 2);
                 	if (colorValue[1] != NULL)
                 	{
                 		gchar* myColor = colorValue[1];
-                		generateResponse(connectFd, myColor, true, "200", query);
+                		generateResponse(session, connectFd, resource, myColor, hasBG, "200", isSlashTest, query);
                 	}
                 	// Skoða --- gerist eitthvað hér?
                 }
@@ -166,24 +204,12 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
         }
         else if (g_strcmp0(file, "/test") == 0)
         {
-            gchar *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n";
-            send(connectFd, headerOk, strlen(headerOk), 0);
-            // TODO: skoða port og IP   path missing: session->path before resource
-            gchar* topHtml = g_strconcat("<!doctype html>\r\n<html>\r\n<body>\r\n\t<p>", resource, "<br/>\r\n\t", getIpAdress(session), ":", getPort(session), (char *) NULL);
-            send(connectFd, topHtml, strlen(topHtml), 0);
-            
-            int i;
-            
-            for (i = 0; i < size; i++)
-            {
-                gchar* result = g_strconcat("<br/>\n\t", g_list_nth_data (keys, i), " = ", g_list_nth_data (values, i), (char *)NULL);
-                send(connectFd, result, strlen(result), 0);
-            }
-            send(connectFd, "<p/>\n<body/>\n<html/>\n", 26, 0);
+        	isSlashTest = true;
+        	generateResponse(session, connectFd, resource, NULL, hasBG, "200", isSlashTest, query);
         }
         else
         {
-        	generateResponse(connectFd, NULL, false, "200", query);
+        	generateResponse(session, connectFd, resource, NULL, false, "200", isSlashTest, query);
         }   
     }
 }
