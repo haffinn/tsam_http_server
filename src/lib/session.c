@@ -22,6 +22,7 @@ typedef struct session
     int state;
     int verb;
     int listener;
+    int maxFd;
     int connection_fd;
 
     struct timeval timer;
@@ -76,3 +77,23 @@ void setSessionVerb(session_t* session, char* verb)
     }
 }
 
+int newConnection(session_t* session, struct sockaddr_storage remoteAddr, socklen_t remoteAddrLen)
+{
+    int newSocket = accept(session->listener, (struct sockaddr *) &remoteAddr, &remoteAddrLen);
+
+    if (newSocket == -1)
+    {
+        perror("accept");
+        return -1;
+    }
+
+    g_queue_push_head(session->q, GINT_TO_POINTER(newSocket));
+    FD_SET(newSocket, &session->read_fds);
+
+    if (newSocket > session->maxFd)
+    {
+        session->maxFd = newSocket;
+    }
+
+    return newSocket;
+}

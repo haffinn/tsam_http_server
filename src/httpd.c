@@ -7,6 +7,7 @@
 #define VERB_HEAD 2
 #define VERB_POST 3
 #define BUFFER_SIZE 65535
+#define PROTOCOL_SIZE 10
 #define VERB_SIZE 25
 #define RESOURCE_SIZE 255
 

@@ -51,6 +51,7 @@ void handleGetRequest(int connectFd, char *resource)
 
     fread(buf, 999, 1, file);
     send(connectFd, buf, strlen(buf), 0);
+    send(connectFd, "\r\n\r\n", 4, 0);
 }
 
 void logToFile(char *ip, int port, char* resource, char* verb, int responseCode) {
@@ -89,20 +90,20 @@ int closeSocket(int socket, session_t* session)
 void server(session_t* session)
 {
     gchar **lines, **tokens, **chunks;
-    char verb[VERB_SIZE], resource[RESOURCE_SIZE];
+    char verb[VERB_SIZE], resource[RESOURCE_SIZE], protocol[PROTOCOL_SIZE];
     char buffer[BUFFER_SIZE];
-    int selectStatus, currentReadFd, readBytes, newSocket;
+    int selectStatus, currentReadFd, readBytes;
 
     // Queue containing connected stream sockets in LRU.
     // Least recently used connection is last.
     session->q = g_queue_new();
 
     struct timeval timer;
-    timer.tv_sec = 5;
+    timer.tv_sec = 30;
     timer.tv_usec = 0;
 
     // TODO: Build dynamically
-    char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 425\r\n\r\n";
 
     // Setup read file descriptor set and timer for select()
     fd_set reader;
@@ -111,38 +112,56 @@ void server(session_t* session)
 
     // Keep track of largest file descriptor
     session->listener = createSocket(session->server);
-    int maxFileDescriptor = session->listener;
+    session->maxFd = session->listener;
     FD_SET(session->listener, &session->read_fds);
     
     // Remote address info
     struct sockaddr_storage remoteAddr;
     char remoteIP[INET_ADDRSTRLEN];
-    socklen_t remoteAddrLen;
 
     // Main Loop
     for (;;)
     {
         reader = session->read_fds;
-        selectStatus = select(maxFileDescriptor + 1, &reader, NULL, NULL, &timer);
+        selectStatus = select(session->maxFd + 1, &reader, NULL, NULL, &timer);
 
         if (selectStatus == -1)
         {
             fprintf(stderr, "Select failed\n");
             exit(1);
         }
+        // Handle timeouts
         else if (selectStatus == 0)
         {
             if (g_queue_get_length(session->q) > 0)
             {
-                maxFileDescriptor = closeSocket(GPOINTER_TO_INT(g_queue_pop_tail(session->q)), session);
+                session->maxFd = closeSocket(GPOINTER_TO_INT(g_queue_pop_tail(session->q)), session);
+                continue;
             }
         }
 
-        for(currentReadFd = session->listener + 1; currentReadFd <= maxFileDescriptor; currentReadFd++)
+        // There's something to read
+        for(currentReadFd = 0; currentReadFd <= session->maxFd; currentReadFd++)
         {
-            if (FD_ISSET(currentReadFd, &reader))
+            if (!FD_ISSET(currentReadFd, &reader))
             {
+                continue;
+            }
+            
+            socklen_t remoteAddrLen = sizeof(remoteAddr);
+
+            if (currentReadFd == session->listener)
+            {
+                printf("Creating new connection\n");
+                newConnection(session, remoteAddr, remoteAddrLen);
+            }
+            else
+            {
+                printf("Reading from: %d\n", currentReadFd);
                 memset(buffer, '\0', BUFFER_SIZE);
+                memset(verb, '\0', VERB_SIZE);
+                memset(resource, '\0', RESOURCE_SIZE);
+                memset(protocol, '\0', PROTOCOL_SIZE);
 
                 getnameinfo((struct sockaddr *) &remoteAddr, remoteAddrLen, remoteIP, sizeof(remoteIP), NULL, 0, NI_NUMERICHOST);
                 readBytes = recv(currentReadFd, buffer, BUFFER_SIZE - 1, 0);;
@@ -156,8 +175,10 @@ void server(session_t* session)
                 chunks = g_strsplit(buffer, "\r\n\r\n", 2);
                 lines = g_strsplit(chunks[0], "\r\n", 20);
                 tokens = g_strsplit(lines[0], " ", 3);
-                strncpy(verb, tokens[0], VERB_SIZE);
-                strncpy(resource, tokens[1], RESOURCE_SIZE);
+                strncpy(verb, tokens[0], strlen(tokens[0]));
+                strncpy(resource, tokens[1], strlen(tokens[1]));
+                strncpy(protocol, tokens[2], strlen(tokens[2]));
+                
                 setSessionHeaders(session, lines);
                 setSessionVerb(session, verb);
 
@@ -183,37 +204,15 @@ void server(session_t* session)
                     logToFile(remoteIP, session->port, resource, verb, 200);
                 }
 
-                gpointer connection = g_hash_table_lookup(session->headers, "Connection");
+                gchar* connection = (gchar *) g_hash_table_lookup(session->headers, "Connection");
 
-                if (connection == NULL || g_strcmp0(connection, "keep-alive") != 0)
+                g_queue_remove(session->q, GINT_TO_POINTER(currentReadFd));
+                g_queue_push_head(session->q, GINT_TO_POINTER(currentReadFd));
+
+                if ((g_strcmp0(protocol, "HTTP/1.0") == 0 && g_strcmp0(connection, "keep-alive") != 0) || (g_strcmp0(connection, "close") == 0))
                 {
                     closeSocket(currentReadFd, session);
                 }
-                else 
-                {                    
-                    g_queue_remove(session->q, GINT_TO_POINTER(currentReadFd));
-                    g_queue_push_head(session->q, GINT_TO_POINTER(currentReadFd));
-                }
-            }
-        }
-        
-        if (FD_ISSET(session->listener, &reader))
-        {
-            remoteAddrLen = sizeof(remoteAddr);
-            newSocket = accept(session->listener, (struct sockaddr *) &remoteAddr, &remoteAddrLen);
-
-            if (newSocket == -1)
-            {
-                perror("accept");
-                break;
-            }
-
-            g_queue_push_head(session->q, GINT_TO_POINTER(newSocket));
-            FD_SET(newSocket, &session->read_fds);
-
-            if (newSocket > maxFileDescriptor)
-            {
-                maxFileDescriptor = newSocket;
             }
         }
     }
