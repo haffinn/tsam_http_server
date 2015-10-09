@@ -41,6 +41,7 @@ void buildDom(char* data, char* buffer)
 void generateDOM(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables, GString* header, char* postData)
 {
 	GString* DOM = g_string_sized_new (0);
+    connection_t *c = (connection_t *) g_hash_table_lookup(session->connections, GINT_TO_POINTER(connectFd));
 
 	g_string_append_printf(DOM, "%s", "<!DOCTYPE html>\r\n<html>\r\n");
 
@@ -55,10 +56,9 @@ void generateDOM(session_t* session, int connectFd, char* resource, gchar* color
 			g_string_append_printf(DOM, "%s", "<body>");
 		}
 
-		// TODO --  ATH GetIP Addr og getport virkar ekki :/
 		// Laga þetta html - það er eitthvað pínu skrítið held ég...
 		gchar* host = g_hash_table_lookup(session->headers, "Host");
-		g_string_append_printf(DOM, "\r\n\t%s%s \r\n\t%s:%d\r\n", host, resource, getIpAdress(session), getPort(session));
+		g_string_append_printf(DOM, "\r\n\t%s%s \r\n\t%s:%d\r\n", host, resource, c->ip, c->port);
 
 		if (isSlashTest)
 		{
@@ -72,9 +72,7 @@ void generateDOM(session_t* session, int connectFd, char* resource, gchar* color
 			{
 				gchar* key = g_list_nth_data(keys, i);
 				gchar* val = g_list_nth_data(values, i);
-				printf("\nite: %d\n", i);
-				printf("key: %s\n", key);
-				printf("val: %s\n", val);
+
 				if (i == 0)
 				{
 					g_string_append_printf(DOM, "\n\t%s = %s<br/>\n\t", key, val);
@@ -99,11 +97,8 @@ void generateDOM(session_t* session, int connectFd, char* resource, gchar* color
 	{
 		g_string_append_printf(DOM, "\t<div>%s</div>\n", postData);
 	}
+
 	g_string_append_printf(DOM, "%s", "</body>\r\n</html>");
-
-	// printf("#######Header: \n '%s'\n", header->str);
-	// printf("#######HTML: \n '%s'\n", DOM->str);
-
 	g_string_append_printf(header, "Content-Length: %lu\r\n\r\n", DOM->len);
 
 	if (session->verb == VERB_HEAD)
@@ -116,7 +111,8 @@ void generateDOM(session_t* session, int connectFd, char* resource, gchar* color
 		send(connectFd, DOM->str, DOM->len, 0);
 	}
 
-	// Todo free up GString objects...
+    g_string_free(header, true);
+    g_string_free(DOM, true);
 }
 
 void generateResponse(session_t* session, int connectFd, char* resource, gchar* color, bool hasBG, gchar* statusCode, bool isSlashTest, GHashTable* variables, char* postData)
@@ -134,6 +130,7 @@ void generateResponse(session_t* session, int connectFd, char* resource, gchar* 
 	{
 		g_string_append_printf(header,"%s", "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n");
 	}
+
 	generateDOM(session, connectFd, resource, color, hasBG, statusCode, isSlashTest, variables, header, postData);
 }
 
@@ -158,10 +155,6 @@ GHashTable* parseQueryString(gchar* queryString)
 
 void handleRequest(session_t* session, int connectFd, char* resource, char* postData)
 {
-
-    // TODO: destroy query hash table?
-    // TODO: add POST and HEAD - Haffi
-
     gchar** data = g_strsplit(resource, "?", 2);
     gchar* file = data[0];
     GHashTable* query = parseQueryString(data[1]);
@@ -169,13 +162,9 @@ void handleRequest(session_t* session, int connectFd, char* resource, char* post
     bool hasBG = false;
     bool isSlashTest = false;
 
-
-    // if resource is empty, like this: localhost:port/
     if (data[1] == NULL && (g_strcmp0(data[0], "/") == 0))
     {
-        // TODO: skoða port og IP   path missing: session->path before resource
         generateResponse(session, connectFd, resource, NULL, false, "200", isSlashTest, query, postData);
-
     }
     else
     {
@@ -193,9 +182,7 @@ void handleRequest(session_t* session, int connectFd, char* resource, char* post
             {
                 // URI does not contains bg=(...)
                 // Check if request contains cookie
-                // Cookie:color=red ---> [color = color=red]
                 gchar* cookie = g_hash_table_lookup(session->headers, "Cookie");
-
                
                 if (cookie == NULL)
                 {
