@@ -152,12 +152,10 @@ void server(session_t* session)
 
             if (currentReadFd == session->listener)
             {
-                printf("Creating new connection\n");
                 newConnection(session, remoteAddr, remoteAddrLen);
             }
             else
             {
-                printf("Reading from: %d\n", currentReadFd);
                 memset(buffer, '\0', BUFFER_SIZE);
                 memset(verb, '\0', VERB_SIZE);
                 memset(resource, '\0', RESOURCE_SIZE);
