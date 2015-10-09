@@ -7,6 +7,7 @@
 #define VERB_HEAD 2
 #define VERB_POST 3
 #define BUFFER_SIZE 65535
+#define PROTOCOL_SIZE 10
 #define VERB_SIZE 25
 #define RESOURCE_SIZE 255
 
@@ -30,12 +31,11 @@ int main(int argc, char **argv)
         .port = atoi(argv[1]),
         .directory = "htdocs",
         .verb = 0,
-        .state = 0 // TODO: Hmmm?
+        .state = 0
     };
 
     session.client_size = sizeof(session.client);
     session.server = createServer(session.port);
-    session.socket_fd = createSocket(session.server);
 
     server(&session);
     return 0;

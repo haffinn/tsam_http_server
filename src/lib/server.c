@@ -2,9 +2,21 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+
+static void check_max(gpointer p, gpointer currentMax)
+{
+    gint element = GPOINTER_TO_INT(p);
+    gint *max = currentMax;
+
+    if (element > *(max))
+    {
+        *(max) = element;
+    } 
+}
 
 unsigned short getPort(session_t* session) {
     struct sockaddr_in* socket_address = (struct sockaddr_in*) &session->client;
@@ -307,7 +319,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
     }
 }
 
-void logToFile(session_t *session, char* resource, char* verb, int responseCode) {
+void logToFile(char *ip, int port, char* resource, char* verb, int responseCode) {
     FILE* file = fopen("log", "a");
 
     if (file == NULL) {
@@ -320,8 +332,7 @@ void logToFile(session_t *session, char* resource, char* verb, int responseCode)
     gchar *timestr = g_time_val_to_iso8601(&tv);
 
     // Print to file (append)
-    fprintf(file, "%s : %s:%d %s\n",
-        timestr, getIpAdress(session), getPort(session), verb);
+    fprintf(file, "%s : %s:%d %s\n", timestr, ip, port, verb);
 
     fprintf(file, "%s : %d\n", resource, responseCode);
 
@@ -330,12 +341,16 @@ void logToFile(session_t *session, char* resource, char* verb, int responseCode)
     fclose(file);
 }
 
-void server(session_t* session)
+int closeSocket(int socket, session_t* session)
 {
-    char buffer[BUFFER_SIZE];
-    gchar **lines, **tokens, **chunks;
-    char verb[VERB_SIZE], resource[RESOURCE_SIZE];
-    int connectFd;
+    close(socket);
+    FD_CLR(socket, &session->read_fds);                   
+    g_queue_remove(session->q, GINT_TO_POINTER(socket));
+
+    int max = session->listener;
+    g_queue_foreach(session->q, check_max, &max);
+    return max;
+}
 
     //GHashTable* cookies;
     //cookies = g_hash_table_new(g_int_hash, g_str_equal);
@@ -355,64 +370,132 @@ void server(session_t* session)
     // g_string_free(headerString);
     /* DONT STEAL, YOU WOULDNT KILL A BABY */
 
+void server(session_t* session)
+{
+    gchar **lines, **tokens, **chunks;
+    char verb[VERB_SIZE], resource[RESOURCE_SIZE], protocol[PROTOCOL_SIZE];
+    char buffer[BUFFER_SIZE];
+    int selectStatus, currentReadFd, readBytes;
 
+    // Queue containing connected stream sockets in LRU.
+    // Least recently used connection is last.
+    session->q = g_queue_new();
+
+    struct timeval timer;
+    timer.tv_sec = 30;
+    timer.tv_usec = 0;
+
+    // TODO: Build dynamically
+    char *headerOk = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 425\r\n\r\n";
+
+    // Setup read file descriptor set and timer for select()
+    fd_set reader;
+    FD_ZERO(&reader);
+    session->read_fds = newFdSet();
+
+    // Keep track of largest file descriptor
+    session->listener = createSocket(session->server);
+    session->maxFd = session->listener;
+    FD_SET(session->listener, &session->read_fds);
+    
+    // Remote address info
+    struct sockaddr_storage remoteAddr;
+    char remoteIP[INET_ADDRSTRLEN];
+
+    // Main Loop
     for (;;)
     {
-    	g_new0(char, BUFFER_SIZE);
+        reader = session->read_fds;
+        selectStatus = select(session->maxFd + 1, &reader, NULL, NULL, &timer);
 
-    	if ((connectFd = accept(session->socket_fd, NULL, NULL)) < 0)
-    	{
-    		perror("Accept failed\n");
-    		close(session->socket_fd);
-    		exit(1);
-    	}
-
-        read(connectFd, buffer, BUFFER_SIZE - 1);
-
-        chunks = g_strsplit(buffer, "\r\n\r\n", 2);
-        lines = g_strsplit(chunks[0], "\r\n", 20);
-        tokens = g_strsplit(lines[0], " ", 3);
-        strncpy(verb, tokens[0], VERB_SIZE);
-        strncpy(resource, tokens[1], RESOURCE_SIZE);
-
-        //printf("%s\n", chunks[0]);
-
-        setSessionHeaders(session, lines);
-        setSessionVerb(session, verb);
-
-        if (session->verb == VERB_HEAD || session->verb == VERB_GET)
+        if (selectStatus == -1)
         {
-            logToFile(session, resource, verb, 200);
-       	    //send(connectFd, headerOk, strlen(headerOk), 0);
-
-       	    if (session->verb == VERB_GET)
-       	    {
-                handleGetRequest(session, connectFd, resource);
-       	    }
+            fprintf(stderr, "Select failed\n");
+            exit(1);
         }
-        else if (session->verb == VERB_POST)
+        // Handle timeouts
+        else if (selectStatus == 0)
         {
-            logToFile(session, resource, verb, 200);
-   	        buildDom(chunks[1], buffer);
-       	    //send(connectFd, headerOk, strlen(headerOk), 0);
-       	    send(connectFd, buffer, strlen(buffer), 0);
-        }
-        else
-        {
-             logToFile(session, resource, verb, 500);
+            if (g_queue_get_length(session->q) > 0)
+            {
+                session->maxFd = closeSocket(GPOINTER_TO_INT(g_queue_pop_tail(session->q)), session);
+                continue;
+            }
         }
 
-    	if (shutdown(connectFd, SHUT_RDWR) == -1)
-    	{
-    		perror("Shutdown failed\n");
-    		close(connectFd);
-    		close(session->socket_fd);
-    		exit(1);
-    	}
+        // There's something to read
+        for(currentReadFd = 0; currentReadFd <= session->maxFd; currentReadFd++)
+        {
+            if (!FD_ISSET(currentReadFd, &reader))
+            {
+                continue;
+            }
+            
+            socklen_t remoteAddrLen = sizeof(remoteAddr);
 
-    	close(connectFd);
-        g_hash_table_destroy(session->headers);
+            if (currentReadFd == session->listener)
+            {
+                newConnection(session, remoteAddr, remoteAddrLen);
+            }
+            else
+            {
+                memset(buffer, '\0', BUFFER_SIZE);
+                memset(verb, '\0', VERB_SIZE);
+                memset(resource, '\0', RESOURCE_SIZE);
+                memset(protocol, '\0', PROTOCOL_SIZE);
+
+                getnameinfo((struct sockaddr *) &remoteAddr, remoteAddrLen, remoteIP, sizeof(remoteIP), NULL, 0, NI_NUMERICHOST);
+                readBytes = recv(currentReadFd, buffer, BUFFER_SIZE - 1, 0);;
+
+                if (readBytes <= 0)
+                {
+                    closeSocket(currentReadFd, session);
+                    continue;
+                }
+
+                chunks = g_strsplit(buffer, "\r\n\r\n", 2);
+                lines = g_strsplit(chunks[0], "\r\n", 20);
+                tokens = g_strsplit(lines[0], " ", 3);
+                strncpy(verb, tokens[0], strlen(tokens[0]));
+                strncpy(resource, tokens[1], strlen(tokens[1]));
+                strncpy(protocol, tokens[2], strlen(tokens[2]));
+                
+                setSessionHeaders(session, lines);
+                setSessionVerb(session, verb);
+
+                if (session->verb == VERB_HEAD || session->verb == VERB_GET)
+                {
+                    logToFile(remoteIP, session->port, resource, verb, 200);
+
+                    if (session->verb == VERB_GET)
+                    {
+                        handleGetRequest(currentReadFd, resource);
+                    }
+                }
+                else if (session->verb == VERB_POST)
+                {
+                    logToFile(remoteIP, session->port, resource, verb, 200);
+                    buildDom(chunks[1], buffer);
+                    send(connectFd, buffer, strlen(buffer), 0);
+                }
+                else
+                {
+                    logToFile(remoteIP, session->port, resource, verb, 200);
+                }
+
+                gchar* connection = (gchar *) g_hash_table_lookup(session->headers, "Connection");
+
+                g_queue_remove(session->q, GINT_TO_POINTER(currentReadFd));
+                g_queue_push_head(session->q, GINT_TO_POINTER(currentReadFd));
+
+                if ((g_strcmp0(protocol, "HTTP/1.0") == 0 && g_strcmp0(connection, "keep-alive") != 0) || (g_strcmp0(connection, "close") == 0))
+                {
+                    closeSocket(currentReadFd, session);
+                }
+            }
+        }
     }
-    //g_hash_table_destroy(cookies);
-    close(session->socket_fd);
+
+    FD_ZERO(&session->read_fds);
+    close(session->listener);
 }
