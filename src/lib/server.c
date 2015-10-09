@@ -320,7 +320,7 @@ void handleGetRequest(session_t* session, int connectFd, char* resource)
 }
 
 void logToFile(session_t* session, int socket, char* resource, char* verb, int responseCode) {
-    FILE* file = fopen("log", "a");
+    FILE* file = fopen("httpd.log", "a");
     connection_t *c =(connection_t *)g_hash_table_lookup(session->connections, GINT_TO_POINTER(socket));
 
     if (c == NULL)
@@ -340,7 +340,7 @@ void logToFile(session_t* session, int socket, char* resource, char* verb, int r
 
     // Print to file (append)
     fprintf(file, "%s : %s:%d %s\n", timestr, c->ip, c->port, verb);
-    fprintf(file, "%s : %d\n", resource, responseCode);
+    fprintf(file, "%s : %d\n\n", resource, responseCode);
 
     // Free resources
     g_free(timestr);
